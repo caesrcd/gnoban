@@ -15,6 +15,7 @@ License: MIT
 """
 
 # Python module imports
+import ast
 import json
 import re
 import socket
@@ -94,10 +95,12 @@ class Filter:
 
     Each attribute is an optional list used to match against node data.
     Attributes:
+        - filter_expr: A filter expression (logical string condition).
         - service: List of service flags to match.
         - useragent: List of user agent strings to match.
         - version: List of protocol versions to match.
     """
+    filter_expr: Optional[str] = None
     service: Optional[List[int]] = None
     useragent: Optional[List[str]] = None
     version: Optional[List[int]] = None
@@ -202,6 +205,17 @@ def build_parser() -> ArgumentParser:
             'based on specified criteria.'
         ),
         epilog=textwrap.dedent('''\
+            Complex filter expressions can be built using the keywords `and`, `or`, and `not`
+            to combine primitives. You may also use `&&`, `||`, and `!` as shorthand for these.
+
+            For example: 'srv 26 and not ua "Knots" or ua "Knots"'
+
+            Valid primitives:
+              ver <num>              Match node protocol version.
+              ver >= <num>           Match version with comparison operator.
+              ua 'pattern'           Match substring in user agent.
+              srv <num>              Match if service flag is present.
+
             Services Flags:
               0   = NODE_NETWORK
               2   = NODE_BLOOM
@@ -212,15 +226,19 @@ def build_parser() -> ArgumentParser:
               26  = NODE_KNOTS (experiments)
               29  = NODE_LIBRE_RELAY (experiments)
 
-            Note:
-            If multiple criteria are specified, nodes matching *any* of them will be selected.
-
             Examples:
-              python %(prog)s -s 26 -u 'Knots'
+              python %(prog)s -u 'Knots'
+              python %(prog)s -f 'not ua "Knots" and srv 26 and not srv 29'
+              python %(prog)s -f 'ua "Satoshi:28.1.0" && srv 26 && srv 29'
+
+            Note:
+              When using simple filters (-s, -u, -v) alongside -f, nodes matching *any* of the conditions will be selected.
             '''),
         formatter_class=RawDescriptionHelpFormatter
     )
     parser.add_argument('-h', '--help', action='help', help=SUPPRESS)
+    parser.add_argument('-f', '--filter', metavar="'expr'", type=str,
+        help='Filter nodes using logical expressions.')
     parser.add_argument('-proxy', metavar='ip[:port]', type=str,
         help='Connect through SOCKS5 proxy.')
     parser.add_argument('-s', dest='service', metavar='num', type=int, nargs='+',
@@ -273,6 +291,45 @@ def clean_exit(code: int, exec_exit: bool=True):
             stamp('Shutdown: done')
     if exec_exit:
         sys.exit(code)
+
+def compile_node_filter(expr: str) -> str:
+    """
+    Translates a simplified filter expression string into a valid Python expression.
+
+    This function allows users to write human-friendly filter conditions using keywords
+    like 'ua', 'srv', and 'ver', along with basic boolean operators. The resulting
+    expression is compatible with eval() and can be used to match node attributes.
+
+    Supported transformations:
+      - ua 'pattern'        → re.search(r'pattern', node.subver)
+      - srv N               → (node.services & (1 << N))
+      - ver N               → node.version == N
+      - ver >= N            → node.version >= N
+      - &&, ||, !           → and, or, not
+
+    Parameters:
+        expr (str): A user-provided filter string.
+
+    Returns:
+        str: A valid Python expression string suitable for eval().
+
+    Note:
+        The returned string is intended to be used with eval().
+        Always ensure that 'node' and 're' are properly scoped and trusted.
+    """
+
+    # Logical operators
+    expr = re.sub(r'\s*&&\s*', ' and ', expr)
+    expr = re.sub(r'\s*\|\|\s*', ' or ', expr)
+    expr = re.sub(r'(?<!\w)!(?!=)', 'not ', expr) # convert ! to not, avoid !=
+
+    # Match expressions
+    expr = re.sub(r'\bua\s+[\'"](.+?)[\'"]', r"re.search(r'\1', node.subver)", expr)
+    expr = re.sub(r'\bsrv\s+(\d+)', r'(node.services & (1 << \1))', expr)
+    expr = re.sub(r'\bver\s*([=!<>]+)\s*(\d+)', r'node.version \1 \2', expr)
+    expr = re.sub(r'\bver\s+(\d+)', r'node.version == \1', expr)
+
+    return expr
 
 def exec_getpeerinfo():
     """
@@ -526,6 +583,19 @@ def main():
     if args.version:
         criteria.version = args.version
 
+    if args.filter:
+        # Validate and compile user-defined filter expression
+        parsed_expr = compile_node_filter(args.filter)
+        try:
+            ast.parse(parsed_expr, mode='eval')
+            criteria.filter_expr = parsed_expr
+            node_test = Node(address='', port=0, network='')
+            eval(criteria.filter_expr, {}, {'node': node_test, 're': re})
+        except Exception as e:
+            msg = getattr(e, 'msg', str(e))
+            print(f'Invalid filter expression: {msg}')
+            clean_exit(1)
+
     if args.proxy:
         proxy.ip, proxy.port = split_addressport(args.proxy, DEFAULT_TOR_SOCKS_PORT)
         proxy.url = {
@@ -577,6 +647,10 @@ def match_node(node: Node) -> bool:
 
     if criteria.service:
         if any(node.services & (1 << s) for s in criteria.service):
+            return True
+
+    if criteria.filter_expr:
+        if eval(criteria.filter_expr, {}, {'node': node, 're': re}):
             return True
 
     return False

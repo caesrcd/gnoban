@@ -497,7 +497,7 @@ def getdata_node(node: Node) -> Optional[Node]:
         if len(payload) < 81 + useragent_len:
             raise ValueError
         node.subver = payload[81:81 + useragent_len].decode('utf-8', errors='ignore')
-    except (ConnectionResetError, TimeoutError, ValueError):
+    except (ConnectionResetError, TimeoutError, ValueError, struct.error):
         return None
     finally:
         sock.close()
@@ -825,7 +825,7 @@ def start():
             exec_setban(only_recents)
             only_recents = True
 
-            sleep(60)
+            sleep(10)
     except KeyboardInterrupt:
         clean_exit(0)
 

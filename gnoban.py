@@ -782,8 +782,16 @@ def stamp(text: str):
         - text: The log message to display.
     """
     date = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-    sys.stdout.write(f'\r\n{Color.CYN}{date}{Color.RST} {text}')
-    sys.stdout.flush()
+    try:
+        sys.stdout.write(f'\r\n{Color.CYN}{date}{Color.RST} {text}')
+        sys.stdout.flush()
+    except (BrokenPipeError, ValueError):
+        try:
+            sys.stdout.close()
+        except Exception:
+            pass
+        sys.stderr.write(f'\r\n{Color.CYN}{date}{Color.RST} {text}')
+        sys.stderr.flush()
 
 def start():
     """

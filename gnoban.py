@@ -406,13 +406,15 @@ def exec_setban(only_recents: bool):
         if only_recents and node.conntime < now - 300:
             continue
 
+        services = node.services
         version = node.version
         subver = node.subver
+        if not (services and version and subver):
+            continue
         if address in listbanned or not match_node(node):
             continue
 
         network = node.network
-        services = node.services
         ver = f'{str(version)}{subver}'
         try:
             rpc_bitcoincli('setban', address, 'add', str(BANTIME))

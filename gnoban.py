@@ -16,11 +16,9 @@ License: MIT
 
 # Python module imports
 import ast
-import json
 import re
 import socket
 import struct
-import subprocess
 import sys
 import textwrap
 import threading
@@ -34,19 +32,19 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, StrEnum
-from hashlib import sha256
 from time import time, sleep
 from typing import Dict, List, Optional, Tuple, Union
 from zlib import decompress
 
 # Third-party module imports
 import requests
-from socks import (
-    GeneralProxyError,
-    ProxyConnectionError,
-    socksocket,
-    SOCKS5
+from bitcoin import params as BitcoinParams
+from bitcoin.messages import msg_version as BitcoinMsgver
+from bitcoin.rpc import (
+    JSONRPCError,
+    Proxy as BitcoinRPCProxy
 )
+from socks import socksocket, SOCKS5
 
 class Color(StrEnum):
     """
@@ -174,6 +172,8 @@ BANTIME: int = 365 * 24 * 60 * 60
 
 listbanned: List[str] = []
 
+rpc_conf: dict = {'timeout': 30}
+
 def banner():
     """
     Prints a stylized ASCII banner to standard output.
@@ -252,22 +252,22 @@ def build_parser() -> ArgumentParser:
 
 def check_bitcoind():
     """
-    Verifies connectivity with the bitcoind RPC interface.
+    Verifies connectivity with the bitcoin node using RPC.
 
-    Executes the 'uptime' RPC command via bitcoin-cli to check if the node is reachable.
-    Displays a status message based on the result. Exits the program if the check fails
-    due to command errors, missing binary, or permission issues.
+    Executes the 'uptime' command through the RPC interface to ensure the node is reachable.
+    Displays a status message based on the result, and exits if the check fails due to
+    connection or permission errors.
     """
-    message = 'Checking access to bitcoind RPC'
+    message = 'Checking access to bitcoin node via RPC'
     mark(Status.EMPTY, f'{message}...')
 
     try:
-        rpc_bitcoincli('uptime')
-    except subprocess.CalledProcessError as e:
-        mark(Status.FAILED, e.stderr.decode())
+        BitcoinRPCProxy(**rpc_conf).call('uptime')
+    except JSONRPCError as e:
+        mark(Status.FAILED, f"Error: {e.args[0].get('message')}")
         clean_exit(1)
-    except (FileNotFoundError, OSError, PermissionError) as e:
-        mark(Status.FAILED, e)
+    except Exception as e: # pylint: disable=broad-exception-caught
+        mark(Status.FAILED, f'Error: {e}')
         clean_exit(1)
 
     mark(Status.OK, f"{message}.{' ' * 5}")
@@ -341,11 +341,16 @@ def exec_getpeerinfo():
     mismatched nodes by invoking the 'disconnectnode' RPC command.
     """
     try:
-        output = rpc_bitcoincli('getpeerinfo')
-        peerinfo = json.loads(output)
-    except subprocess.CalledProcessError as e:
-        mark(Status.FAILED, f'Could not load peer info.\r\n{e.stderr.decode()}', False)
-        clean_exit(1)
+        rpc_proxy = BitcoinRPCProxy(**rpc_conf)
+        peerinfo = rpc_proxy.call('getpeerinfo')
+    except JSONRPCError as e:
+        mark(Status.FAILED,
+            f'Could not load peers info.'
+            f"\r\nError: {e.args[0].get('message')}", False)
+        return
+    except Exception as e: # pylint: disable=broad-exception-caught
+        mark(Status.FAILED, f'Could not load peers info.\r\nError: {e}', False)
+        return
 
     for peer in peerinfo:
         addressport = peer.get('addr', '')
@@ -379,14 +384,17 @@ def exec_getpeerinfo():
                 continue
             ver = f'{str(version)}{subver}'
             try:
-                rpc_bitcoincli('disconnectnode', addressport)
+                rpc_proxy.call('disconnectnode', addressport)
                 stamp(f'Node disconnected: net={network}, services={services}, version={ver}')
-            except subprocess.CalledProcessError as e:
-                if e.returncode != 29:
+            except JSONRPCError as e:
+                if e.args[0].get('code') != -29:
                     mark(Status.FAILED,
-                        f'Could not disconnect node {addressport,} ({ver})'
-                        f'\r\n{e.stderr.decode()}',
-                        False)
+                        f'Could not disconnect address {addressport} ({ver})'
+                        f"\r\nError: {e.args[0].get('message')}", False)
+            except Exception as e: # pylint: disable=broad-exception-caught
+                mark(Status.FAILED,
+                    f'Could not disconnect address {addressport} ({ver})'
+                    f'\r\nError: {e}', False)
             continue
 
 def exec_setban(only_recents: bool):
@@ -401,6 +409,10 @@ def exec_setban(only_recents: bool):
         - only_recents: If True, only considers nodes connected within the last 5 minutes.
     """
     now = time()
+    try:
+        rpc_proxy = BitcoinRPCProxy(**rpc_conf)
+    except Exception: # pylint: disable=broad-exception-caught
+        return
 
     for address, node in allnodes.items():
         if only_recents and node.conntime < now - 300:
@@ -417,15 +429,17 @@ def exec_setban(only_recents: bool):
         network = node.network
         ver = f'{str(version)}{subver}'
         try:
-            rpc_bitcoincli('setban', address, 'add', str(BANTIME))
+            rpc_proxy.call('setban', address, 'add', BANTIME)
             listbanned.append(address)
             stamp(f'Node banned: net={network}, services={services}, version={ver}')
-        except subprocess.CalledProcessError as e:
+        except JSONRPCError as e:
             msg = f'Could not ban address {address}'
-            if e.returncode == 23:
+            if e.args[0].get('code') == -23:
                 stamp(f'{msg} (already banned)')
             else:
-                mark(Status.FAILED, f'{msg}\r\n{e.stderr.decode()}', False)
+                mark(Status.FAILED, f"{msg}\r\nError: {e.args[0].get('message')}", False)
+        except Exception as e: # pylint: disable=broad-exception-caught
+            mark(Status.FAILED, f'Could not ban address {address}\r\nError: {e}', False)
 
 def getdata_node(node: Node) -> Optional[Node]:
     """
@@ -445,10 +459,9 @@ def getdata_node(node: Node) -> Optional[Node]:
         return None
 
     if not proxy.ip and node.network in {'ipv6', 'cjdns'}:
-        family = socket.AF_INET6
+        sock = socksocket(socket.AF_INET6)
     else:
-        family = socket.AF_INET
-    sock = socksocket(family)
+        sock = socksocket(socket.AF_INET)
     sock.settimeout(10)
 
     if node.network == 'i2p':
@@ -460,12 +473,6 @@ def getdata_node(node: Node) -> Optional[Node]:
     else:
         sock.settimeout(5)
 
-    try:
-        sock.connect((node.address, node.port))
-    except (socket.gaierror, GeneralProxyError, OSError, ProxyConnectionError):
-        sock.close()
-        return None
-
     def read_bytes(sock: socksocket, length: int) -> bytes:
         data = b''
         while len(data) < length:
@@ -475,31 +482,33 @@ def getdata_node(node: Node) -> Optional[Node]:
             data += chunk
         return data
 
-    magic = b'\xf9\xbe\xb4\xd9'
-    payload = struct.pack('<iQQ26s26sQ', 70015, 0, int(time()), b'\x00'*26, b'\x00'*26, 0)
-    payload += b'\x00' + struct.pack('<i', 0) + b'\x00'
-    header = (
-        magic +
-        b'version'.ljust(12, b'\x00') +
-        struct.pack('<I', len(payload)) +
-        sha256(sha256(payload).digest()).digest()[:4]
-    )
-    sock.sendall(header + payload)
-
     try:
-        if read_bytes(sock, 4) != magic:
-            raise ValueError
-        version_msg = read_bytes(sock, 20)
-        length = struct.unpack('<I', version_msg[12:16])[0]
-        payload = read_bytes(sock, length)
+        sock.connect((node.address, node.port))
+        msg_version = BitcoinMsgver()
+        msg_version.addrTo.ip = node.address
+        msg_version.addrTo.port = node.port
+        msg_version.fRelay = False
+        msg_version.nServices = 1
+        msg_version.nTime = int(time())
+        msg_version.nVersion = 70016
+        sock.send(msg_version.to_bytes())
 
-        node.version = int(struct.unpack('<i', payload[0:4])[0])
-        node.services = int(struct.unpack('<Q', payload[4:12])[0])
-        useragent_len = payload[80]
-        if len(payload) < 81 + useragent_len:
+        header = read_bytes(sock, 24)
+        if (
+            len(header) < 24
+            or header[0:4] != BitcoinParams.MESSAGE_START
+            or header[4:16].rstrip(b'\x00') != b'version'
+        ):
             raise ValueError
-        node.subver = payload[81:81 + useragent_len].decode('utf-8', errors='ignore')
-    except (ConnectionResetError, TimeoutError, ValueError, struct.error):
+
+        payload = read_bytes(sock, struct.unpack('<I', header[16:20])[0])
+        recv_version = BitcoinMsgver()
+        recv_version.deserialize(payload)
+
+        node.version = int(recv_version.nVersion)
+        node.services = int(recv_version.nServices)
+        node.subver = recv_version.strSubVer.decode('utf-8', errors='ignore')
+    except Exception: # pylint: disable=broad-exception-caught
         return None
     finally:
         sock.close()
@@ -517,15 +526,19 @@ def load_allnodes():
     message = 'Loading known addresses'
     mark(Status.EMPTY, f'{message}...')
 
-    output = rpc_bitcoincli('getaddrmaninfo')
-    addrmaninfo = json.loads(output)
-
-    amount_nodes = addrmaninfo.get('all_networks', {}).get('total', 0)
-    if amount_nodes == 0:
-        return
-
-    output = rpc_bitcoincli('getnodeaddresses', str(amount_nodes))
-    nodeaddresses = json.loads(output)
+    try:
+        rpc_proxy = BitcoinRPCProxy(**(rpc_conf | {'timeout': 300}))
+        addrmaninfo = rpc_proxy.call('getaddrmaninfo')
+        amount_nodes = addrmaninfo.get('all_networks', {}).get('total', 0)
+        if amount_nodes == 0:
+            return
+        nodeaddresses = rpc_proxy.call('getnodeaddresses', amount_nodes)
+    except JSONRPCError as e:
+        mark(Status.FAILED, f"Error: {e.args[0].get('message')}")
+        clean_exit(1)
+    except Exception as e: # pylint: disable=broad-exception-caught
+        mark(Status.FAILED, f'Error: {e}')
+        clean_exit(1)
 
     for node in nodeaddresses:
         allnodes[node['address']] = Node(
@@ -547,8 +560,14 @@ def load_listbanned():
     message = 'Loading banned addresses'
     mark(Status.EMPTY, f'{message}...')
 
-    output = rpc_bitcoincli('listbanned')
-    bannedaddresses = json.loads(output)
+    try:
+        bannedaddresses = BitcoinRPCProxy(**rpc_conf).call('listbanned')
+    except JSONRPCError as e:
+        mark(Status.FAILED, f"Error: {e.args[0].get('message')}")
+        clean_exit(1)
+    except Exception as e: # pylint: disable=broad-exception-caught
+        mark(Status.FAILED, f'Error: {e}')
+        clean_exit(1)
 
     listbanned.clear()
     listbanned.extend(node['address'].split('/')[0] for node in bannedaddresses)
@@ -592,8 +611,9 @@ def main():
             ast.parse(parsed_expr, mode='eval')
             criteria.filter_expr = parsed_expr
             node_test = Node(address='', port=0, network='')
+            # pylint: disable=eval-used
             eval(criteria.filter_expr, {}, {'node': node_test, 're': re})
-        except Exception as e:
+        except Exception as e: # pylint: disable=broad-exception-caught
             msg = getattr(e, 'msg', str(e))
             print(f'Invalid filter expression: {msg}')
             clean_exit(1)
@@ -652,6 +672,7 @@ def match_node(node: Node) -> bool:
             return True
 
     if criteria.filter_expr:
+        # pylint: disable=eval-used
         if eval(criteria.filter_expr, {}, {'node': node, 're': re}):
             return True
 
@@ -681,24 +702,6 @@ def probe_nodes():
             allnodes[address].version = data.version
             allnodes[address].subver = data.subver
     stamp('Probe nodes thread exit')
-
-def rpc_bitcoincli(*args) -> str:
-    """
-    Executes a bitcoin-cli RPC command and returns the output as a string.
-
-    Waits for the Bitcoin Core RPC server to become available (30s timeout) before executing
-    the command. Raises an exception on failure, allowing callers to handle errors properly.
-
-    Parameters:
-        - *args: Positional arguments to pass to the bitcoin-cli command.
-
-    Returns:
-        - str: The decoded output from the command.
-    """
-    return subprocess.check_output(
-        ['bitcoin-cli', '-rpcwait', '-rpcwaittimeout=30'] + list(args),
-        stderr=subprocess.PIPE
-    ).decode()
 
 def snapshot_bitnodes():
     """
@@ -790,7 +793,7 @@ def stamp(text: str):
     except (BrokenPipeError, ValueError):
         try:
             sys.stdout.close()
-        except Exception:
+        except Exception: # pylint: disable=broad-exception-caught
             pass
         sys.stderr.write(f'\r\n{Color.CYN}{date}{Color.RST} {text}')
         sys.stderr.flush()

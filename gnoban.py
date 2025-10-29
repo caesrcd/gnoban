@@ -172,7 +172,11 @@ BANTIME: int = 365 * 24 * 60 * 60
 
 listbanned: List[str] = []
 
-rpc_conf: dict = {'timeout': 30}
+rpc_conf: dict = {
+    'service_url': None,
+    'btc_conf_file': None,
+    'timeout': 30
+}
 
 def banner():
     """
@@ -199,7 +203,7 @@ def build_parser() -> ArgumentParser:
     """
     parser = ArgumentParser(
         add_help=False,
-        usage='python %(prog)s [options]',
+        usage='python %(prog)s [options]... [criteria]...',
         description=(
             'Scan and evaluate known nodes to determine which should be banned '
             'based on specified criteria.'
@@ -237,15 +241,21 @@ def build_parser() -> ArgumentParser:
         formatter_class=RawDescriptionHelpFormatter
     )
     parser.add_argument('-h', '--help', action='help', help=SUPPRESS)
-    parser.add_argument('-f', '--filter', metavar="'expr'", type=str,
+    argrp_opt = parser.add_argument_group('Options')
+    argrp_opt.add_argument('-conf', metavar="'str'", type=str,
+        help='Specify the Bitcoin node configuration file.')
+    argrp_opt.add_argument('-rpcurl', metavar="'str'", type=str,
+        help='Specify the Bitcoin node RPC endpoint.')
+    argrp_cri = parser.add_argument_group('Criteria')
+    argrp_cri.add_argument('-f', '--filter', metavar="'expr'", type=str,
         help='Filter nodes using logical expressions.')
-    parser.add_argument('-proxy', metavar='ip[:port]', type=str,
+    argrp_cri.add_argument('-proxy', metavar='ip[:port]', type=str,
         help='Connect through SOCKS5 proxy.')
-    parser.add_argument('-s', dest='service', metavar='num', type=int, nargs='+',
+    argrp_cri.add_argument('-s', dest='service', metavar='num', type=int, nargs='+',
         help='Service flags provided by the node.')
-    parser.add_argument('-u', dest='useragent', metavar="'str'", type=str, nargs='+',
+    argrp_cri.add_argument('-u', dest='useragent', metavar="'str'", type=str, nargs='+',
         help="Matches part of the node's user agent.")
-    parser.add_argument('-v', dest='version', metavar='num', type=int, nargs='+',
+    argrp_cri.add_argument('-v', dest='version', metavar='num', type=int, nargs='+',
         help='Protocol version of the node.')
 
     return parser
@@ -588,6 +598,11 @@ def main():
     """
     parser = build_parser()
     args = parser.parse_args()
+
+    if args.rpcurl:
+        rpc_conf['service_url'] = args.rpcurl
+    elif args.conf:
+        rpc_conf['btc_conf_file'] = args.conf
 
     if args.service:
         criteria.service = args.service

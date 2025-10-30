@@ -221,28 +221,16 @@ def build_parser() -> ArgumentParser:
             Complex filter expressions can be built using the keywords `and`, `or`, and `not`
             to combine primitives. You may also use `&&`, `||`, and `!` as shorthand for these.
 
-            For example: 'srv 26 and not ua "Knots" or ua "Knots"'
-
             Valid primitives:
               ver <num>              Match node protocol version.
               ver >= <num>           Match version with comparison operator.
               ua 'pattern'           Match substring in user agent.
               srv <num>              Match if service flag is present.
 
-            Services Flags:
-              0   = NODE_NETWORK
-              2   = NODE_BLOOM
-              3   = NODE_WITNESS
-              6   = NODE_COMPACT_FILTERS
-              10  = NODE_NETWORK_LIMITED
-              11  = NODE_P2P_V2
-              26  = NODE_KNOTS (experiments)
-              29  = NODE_LIBRE_RELAY (experiments)
-
             Examples:
-              python %(prog)s -u 'Knots'
-              python %(prog)s -f 'not ua "Knots" and srv 26 and not srv 29'
-              python %(prog)s -f 'ua "Satoshi:28.1.0" && srv 26 && srv 29'
+              python %(prog)s -f '(ua "Knots" or srv 26) and not srv 29'
+              python %(prog)s -conf /mnt/btc/bitcoin.conf --unban -u 'Knobs'
+              python %(prog)s -rpcurl http://user:pass@192.168.0.10:8332 -u 'Knots'
 
             Note:
               When using simple filters (-s, -u, -v) alongside -f, nodes matching *any* of the conditions will be selected.

@@ -127,6 +127,13 @@ class Node:
     version: Optional[int] = 0
     subver: Optional[str] = ''
 
+    def is_empty(self) -> bool:
+        """
+        Returns whether the node lacks any relevant metadata.
+        Useful for detecting placeholder or uninitialized node entries.
+        """
+        return not (self.conntime or self.services or self.version or self.subver)
+
 allnodes: Dict[str, Node] = {}
 
 @dataclass
@@ -171,6 +178,8 @@ DEFAULT_TOR_SOCKS_PORT: int = 9050
 BANTIME: int = 365 * 24 * 60 * 60
 
 listbanned: List[str] = []
+
+options: dict = {'enable_unban': False}
 
 rpc_conf: dict = {
     'service_url': None,
@@ -246,6 +255,8 @@ def build_parser() -> ArgumentParser:
         help='Specify the Bitcoin node configuration file.')
     argrp_opt.add_argument('-rpcurl', metavar="'str'", type=str,
         help='Specify the Bitcoin node RPC endpoint.')
+    argrp_opt.add_argument('--unban', action='store_true',
+        help='Enable unbanning of nodes that do not meet the criteria.')
     argrp_cri = parser.add_argument_group('Criteria')
     argrp_cri.add_argument('-f', '--filter', metavar="'expr'", type=str,
         help='Filter nodes using logical expressions.')
@@ -425,31 +436,33 @@ def exec_setban(only_recents: bool):
         return
 
     for address, node in allnodes.items():
-        if only_recents and node.conntime < now - 300:
+        if node.is_empty() or (only_recents and node.conntime < now - 300):
             continue
 
-        services = node.services
-        version = node.version
-        subver = node.subver
-        if not (services and version and subver):
-            continue
-        if address in listbanned or not match_node(node):
-            continue
-
-        network = node.network
-        ver = f'{str(version)}{subver}'
+        msg = (
+            f'Node: net={node.network}, services={node.services}, '
+            f'version={str(node.version)}{node.subver}'
+        )
         try:
-            rpc_proxy.call('setban', address, 'add', BANTIME)
-            listbanned.append(address)
-            stamp(f'Node banned: net={network}, services={services}, version={ver}')
+            if match_node(node) and address not in listbanned:
+                rpc_proxy.call('setban', address, 'add', BANTIME)
+                listbanned.append(address)
+                stamp(msg.replace('Node:', 'Node banned:', 1))
+            elif options['enable_unban'] and not match_node(node) and address in listbanned:
+                rpc_proxy.call('setban', address, 'remove')
+                listbanned.remove(address)
+                stamp(msg.replace('Node:', 'Node unbanned:', 1))
         except JSONRPCError as e:
-            msg = f'Could not ban address {address}'
+            msg = f'Unable to send the setban request to {address}'
             if e.args[0].get('code') == -23:
                 stamp(f'{msg} (already banned)')
+            elif e.args[0].get('code') == -30:
+                stamp(f'{msg} (already unbanned)')
             else:
                 mark(Status.FAILED, f"{msg}\r\nError: {e.args[0].get('message')}", False)
         except Exception as e: # pylint: disable=broad-exception-caught
-            mark(Status.FAILED, f'Could not ban address {address}\r\nError: {e}', False)
+            msg = f'Unable to send the setban request to {address}'
+            mark(Status.FAILED, f'{msg}\r\nError: {e}', False)
 
 def getdata_node(node: Node) -> Optional[Node]:
     """
@@ -598,6 +611,8 @@ def main():
     """
     parser = build_parser()
     args = parser.parse_args()
+
+    options['enable_unban'] = args.unban
 
     if args.rpcurl:
         rpc_conf['service_url'] = args.rpcurl

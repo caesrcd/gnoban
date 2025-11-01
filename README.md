@@ -1,27 +1,28 @@
-# GNOBAN - Global Node Search & Ban
+# Global Node Search & Ban
 
 A script to analyze and ban Bitcoin nodes based on custom criteria.
 
-## 📋 Description
+## Description
 
-**GNOBAN** evaluates Bitcoin nodes connected to your full node and automatically bans those that match specified criteria — such as service flags, protocol versions, or user agent strings.
+**GNOBAN** evaluates Bitcoin nodes connected to your node and bans those that match specified criteria — such as service flags, protocol versions, user agent strings, or minimum transaction fees.
 
-## 📌 Features
+## Features
 
 - Scans all known addresses stored in your node's `addrman`
-- Automatically bans nodes according to defined criteria:
+- Bans nodes according to defined criteria:
+  - Minimum transaction fees
   - Protocol version
   - User agent substring match
   - Service flags
+- Unbans nodes that no longer meet the criteria
 - SOCKS5 proxy support
 
-## 📦 Requirements
+## Requirements
 
 - Python 3.11+
-- `bitcoind` running with RPC enabled (`server=1`)
-- Access to `bitcoin-cli`
+- Bitcoin node running with RPC access allowed
 
-## 💻 Usage
+## Usage
 
 ```bash
 git clone https://github.com/caesrcd/gnoban.git
@@ -32,6 +33,6 @@ pip install -r requirements.txt
 python gnoban.py --help
 ```
 
-## 🔐 License
+## License
 
 Distributed under the MIT software license, see the accompanying file COPYING or visit: https://opensource.org/licenses/mit.

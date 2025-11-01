@@ -99,6 +99,7 @@ class Filter:
         - version: List of protocol versions to match.
     """
     filter_expr: Optional[str] = None
+    minfeefilter: Optional[float] = None
     service: Optional[List[int]] = None
     useragent: Optional[List[str]] = None
     version: Optional[List[int]] = None
@@ -111,21 +112,20 @@ class Node:
     Represents a remote node with network connection metadata.
 
     Attributes:
-        - address: IP address of the node.
-        - port: Port number used by the node.
+        - addr: IP address and port of the node.
         - network: Network type (e.g., ipv4, ipv6, onion).
         - conntime: Unix timestamp when the connection was established.
         - services: Service flags advertised by the node.
         - version: Protocol version used by the node.
         - subver: User agent string of the node.
     """
-    address: str
-    port: int
+    addr: str
     network: str
-    conntime: Optional[int] = 0
     services: Optional[int] = 0
+    conntime: Optional[int] = 0
     version: Optional[int] = 0
     subver: Optional[str] = ''
+    minfeefilter: Optional[float] = 0
 
     def is_empty(self) -> bool:
         """
@@ -222,6 +222,7 @@ def build_parser() -> ArgumentParser:
             to combine primitives. You may also use `&&`, `||`, and `!` as shorthand for these.
 
             Valid primitives:
+              mff <num>              Match if minfeefilter is greater than <num> (BTC/kvB).
               ver <num>              Match node protocol version.
               ver >= <num>           Match version with comparison operator.
               ua 'pattern'           Match substring in user agent.
@@ -229,11 +230,11 @@ def build_parser() -> ArgumentParser:
 
             Examples:
               python %(prog)s -f '(ua "Knots" or srv 26) and not srv 29'
-              python %(prog)s -conf /mnt/btc/bitcoin.conf --unban -u 'Knobs'
+              python %(prog)s -conf /mnt/btc/bitcoin.conf --unban -m 0.000009
               python %(prog)s -rpcurl http://user:pass@192.168.0.10:8332 -u 'Knots'
 
             Note:
-              When using simple filters (-s, -u, -v) alongside -f, nodes matching *any* of the conditions will be selected.
+              When using simple filters (-m, -s, -u, -v) alongside -f, nodes matching *any* of the conditions will be selected.
             '''),
         formatter_class=RawDescriptionHelpFormatter
     )
@@ -241,6 +242,8 @@ def build_parser() -> ArgumentParser:
     argrp_opt = parser.add_argument_group('Options')
     argrp_opt.add_argument('-conf', metavar="'str'", type=str,
         help='Specify the Bitcoin node configuration file.')
+    argrp_opt.add_argument('-proxy', metavar='ip[:port]', type=str,
+        help='Connect through SOCKS5 proxy.')
     argrp_opt.add_argument('-rpcurl', metavar="'str'", type=str,
         help='Specify the Bitcoin node RPC endpoint.')
     argrp_opt.add_argument('--unban', action='store_true',
@@ -248,8 +251,8 @@ def build_parser() -> ArgumentParser:
     argrp_cri = parser.add_argument_group('Criteria')
     argrp_cri.add_argument('-f', '--filter', metavar="'expr'", type=str,
         help='Filter nodes using logical expressions.')
-    argrp_cri.add_argument('-proxy', metavar='ip[:port]', type=str,
-        help='Connect through SOCKS5 proxy.')
+    argrp_cri.add_argument('-m', dest='minfeefilter', metavar='num', type=float,
+        help='Match if minfeefilter is greater than <num> (BTC/kvB).')
     argrp_cri.add_argument('-s', dest='service', metavar='num', type=int, nargs='+',
         help='Service flags provided by the node.')
     argrp_cri.add_argument('-u', dest='useragent', metavar="'str'", type=str, nargs='+',
@@ -306,15 +309,16 @@ def compile_node_filter(expr: str) -> str:
     Translates a simplified filter expression string into a valid Python expression.
 
     This function allows users to write human-friendly filter conditions using keywords
-    like 'ua', 'srv', and 'ver', along with basic boolean operators. The resulting
+    like 'mff', 'srv', 'ua', and 'ver', along with basic boolean operators. The resulting
     expression is compatible with eval() and can be used to match node attributes.
 
     Supported transformations:
-      - ua 'pattern'        → re.search(r'pattern', node.subver)
+      - &&, ||, !           → and, or, not
+      - mff N               → node.minfeefilter > N
       - srv N               → (node.services & (1 << N))
+      - ua 'pattern'        → re.search(r'pattern', node.subver)
       - ver N               → node.version == N
       - ver >= N            → node.version >= N
-      - &&, ||, !           → and, or, not
 
     Parameters:
         expr (str): A user-provided filter string.
@@ -333,10 +337,11 @@ def compile_node_filter(expr: str) -> str:
     expr = re.sub(r'(?<!\w)!(?!=)', 'not ', expr) # convert ! to not, avoid !=
 
     # Match expressions
-    expr = re.sub(r'\bua\s+[\'"](.+?)[\'"]', r"re.search(r'\1', node.subver)", expr)
+    expr = re.sub(r'\bmff\s+([\d.]+)', r'node.minfeefilter > \1', expr)
     expr = re.sub(r'\bsrv\s+(\d+)', r'(node.services & (1 << \1))', expr)
-    expr = re.sub(r'\bver\s*([=!<>]+)\s*(\d+)', r'node.version \1 \2', expr)
+    expr = re.sub(r'\bua\s+[\'"](.+?)[\'"]', r"re.search(r'\1', node.subver)", expr)
     expr = re.sub(r'\bver\s+(\d+)', r'node.version == \1', expr)
+    expr = re.sub(r'\bver\s*([=!<>]+)\s*(\d+)', r'node.version \1 \2', expr)
 
     return expr
 
@@ -362,47 +367,43 @@ def exec_getpeerinfo():
         return
 
     for peer in peerinfo:
-        addressport = peer.get('addr', '')
-        network = peer.get('network', '')
-        services = int(peer.get('services', '0'), 16)
-        version = peer.get('version', 0)
-        subver = peer.get('subver', '')
-        if not (addressport and network and subver) or network == 'not_publicly_routable':
+        conntime = peer.get('conntime')
+        network = peer.get('network')
+        subver = peer.get('subver')
+        if int(time()) - conntime <= 15 or not subver or network == 'not_publicly_routable':
             continue
 
-        address, port = split_addressport(addressport)
-        conntime = peer.get('conntime')
-        if not isinstance(conntime, int):
-            conntime = int(time())
-
         node = Node(
-            address=address,
-            port=port or 8333,
+            addr=peer.get('addr'),
             network=network,
+            services=int(peer.get('services'), 16),
             conntime=conntime,
-            services=services,
-            version=version,
-            subver=subver
+            version=peer.get('version'),
+            subver=subver,
+            minfeefilter=float(peer.get('minfeefilter'))
         )
 
+        address, _ = split_addressport(node.addr)
         node_old = allnodes.get(address)
         if address != '127.0.0.1' and (not node_old or conntime != node_old.conntime):
             allnodes[address] = node
         if address == '127.0.0.1' or node_old:
             if not match_node(node) or (address != '127.0.0.1' and address not in listbanned):
                 continue
-            ver = f'{str(version)}{subver}'
             try:
-                rpc_proxy.call('disconnectnode', addressport)
-                stamp(f'Node disconnected: net={network}, services={services}, version={ver}')
+                rpc_proxy.call('disconnectnode', node.addr)
+                stamp(f'Node disconnected: net={node.network}, services={node.services}, '
+                    f'version={str(node.version)}{node.subver}')
             except JSONRPCError as e:
                 if e.args[0].get('code') != -29:
                     mark(Status.FAILED,
-                        f'Could not disconnect address {addressport} ({ver})'
+                        f'Could not disconnect address {node.addr} '
+                        f'({str(node.version)}{node.subver})'
                         f"\r\nError: {e.args[0].get('message')}", False)
             except Exception as e: # pylint: disable=broad-exception-caught
                 mark(Status.FAILED,
-                    f'Could not disconnect address {addressport} ({ver})'
+                    f'Could not disconnect address {node.addr} '
+                    f'({str(node.version)}{node.subver})'
                     f'\r\nError: {e}', False)
             continue
 
@@ -494,10 +495,11 @@ def getdata_node(node: Node) -> Optional[Node]:
         return data
 
     try:
-        sock.connect((node.address, node.port))
+        address, port = split_addressport(node.addr)
+        sock.connect((address, port))
         msg_version = BitcoinMsgver()
-        msg_version.addrTo.ip = node.address
-        msg_version.addrTo.port = node.port
+        msg_version.addrTo.ip = address
+        msg_version.addrTo.port = port
         msg_version.fRelay = False
         msg_version.nServices = 1
         msg_version.nTime = int(time())
@@ -552,9 +554,12 @@ def load_allnodes():
         clean_exit(1)
 
     for node in nodeaddresses:
+        if node['network'] in {'ipv6', 'cjdns'}:
+            addr = f"[{node['address']}]:{node['port']}"
+        else:
+            addr = f"{node['address']}:{node['port']}"
         allnodes[node['address']] = Node(
-            address=node['address'],
-            port=node['port'] or 8333,
+            addr=addr,
             network=node['network']
         )
 
@@ -584,14 +589,15 @@ def load_listbanned():
     listbanned.extend(node['address'].split('/')[0] for node in bannedaddresses)
     mark(Status.OK, f'{message}. ({len(listbanned)} entries)')
 
+# pylint: disable=too-many-branches
 def main():
     """
     Entry point of the program that parses command-line arguments and initializes
     program state accordingly.
 
     - Parses CLI arguments using the argument parser built by `build_parser()`.
-    - Sets filtering criteria based on user input such as service, useragent regex patterns,
-      and version.
+    - Sets filtering criteria based on user input such as minfeefilter, service,
+      useragent regex patterns, and version.
     - Validates regex patterns provided for useragent and exits if invalid.
     - Configures proxy settings if provided.
     - If no criteria are specified, prints help and exits.
@@ -606,6 +612,9 @@ def main():
         rpc_conf['service_url'] = args.rpcurl
     elif args.conf:
         rpc_conf['btc_conf_file'] = args.conf
+
+    if args.minfeefilter:
+        criteria.minfeefilter = args.minfeefilter
 
     if args.service:
         criteria.service = args.service
@@ -628,7 +637,7 @@ def main():
         try:
             ast.parse(parsed_expr, mode='eval')
             criteria.filter_expr = parsed_expr
-            node_test = Node(address='', port=0, network='')
+            node_test = Node(addr='', network='')
             # pylint: disable=eval-used
             eval(criteria.filter_expr, {}, {'node': node_test, 're': re})
         except Exception as e: # pylint: disable=broad-exception-caught
@@ -677,6 +686,10 @@ def match_node(node: Node) -> bool:
     Returns:
         - bool: True if the node matches any filter, False otherwise.
     """
+    if criteria.minfeefilter:
+        if node.minfeefilter > criteria.minfeefilter:
+            return True
+
     if criteria.version:
         if str(node.version) in map(str, criteria.version):
             return True
@@ -714,7 +727,7 @@ def probe_nodes():
             data = future.result()
             if not data:
                 continue
-            address = data.address
+            address, _ = split_addressport(data.addr)
             allnodes[address].conntime = int(time())
             allnodes[address].services = data.services
             allnodes[address].version = data.version
@@ -748,7 +761,7 @@ def snapshot_bitnodes():
             continue
 
         conntime = int(info[2])
-        address, port = split_addressport(addressport)
+        address, _ = split_addressport(addressport)
         node = allnodes.get(address)
         if node and conntime < node.conntime and node.subver != '':
             continue
@@ -761,8 +774,7 @@ def snapshot_bitnodes():
             network = 'ipv4'
 
         allnodes[address] = Node(
-            address=address,
-            port=port,
+            addr=addressport,
             network=network,
             conntime=conntime,
             services=int(info[3]),

@@ -540,12 +540,9 @@ def load_allnodes():
     mark(Status.EMPTY, f'{message}...')
 
     try:
-        rpc_proxy = BitcoinRPCProxy(**(rpc_conf | {'timeout': 300}))
-        addrmaninfo = rpc_proxy.call('getaddrmaninfo')
-        amount_nodes = addrmaninfo.get('all_networks', {}).get('total', 0)
-        if amount_nodes == 0:
-            return
-        nodeaddresses = rpc_proxy.call('getnodeaddresses', amount_nodes)
+        nodeaddresses = BitcoinRPCProxy(
+            **(rpc_conf | {'timeout': 300})
+        ).call('getnodeaddresses', 0)
     except JSONRPCError as e:
         mark(Status.FAILED, f"Error: {e.args[0].get('message')}")
         clean_exit(1)

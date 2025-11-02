@@ -18,7 +18,6 @@ License: MIT
 import ast
 import re
 import socket
-import struct
 import sys
 import textwrap
 import threading
@@ -38,8 +37,10 @@ from zlib import decompress
 
 # Third-party module imports
 import requests
-from bitcoin import params as BitcoinParams
-from bitcoin.messages import msg_version as BitcoinMsgver
+from bitcoin.messages import (
+    msg_version as BitcoinMsgver,
+    MsgSerializable
+)
 from bitcoin.rpc import (
     JSONRPCError,
     Proxy as BitcoinRPCProxy
@@ -498,25 +499,14 @@ def getdata_node(node: Node) -> Optional[Node]:
         address, port = split_addressport(node.addr)
         sock.connect((address, port))
         msg_version = BitcoinMsgver()
-        msg_version.addrTo.ip = address
-        msg_version.addrTo.port = port
-        msg_version.fRelay = False
-        msg_version.nServices = 1
-        msg_version.nTime = int(time())
         msg_version.nVersion = 70016
+        msg_version.fRelay = False
         sock.send(msg_version.to_bytes())
 
         header = read_bytes(sock, 24)
-        if (
-            len(header) < 24
-            or header[0:4] != BitcoinParams.MESSAGE_START
-            or header[4:16].rstrip(b'\x00') != b'version'
-        ):
-            raise ValueError
-
-        payload = read_bytes(sock, struct.unpack('<I', header[16:20])[0])
-        recv_version = BitcoinMsgver()
-        recv_version.deserialize(payload)
+        payload_size = int.from_bytes(header[16:20], byteorder='little')
+        payload = read_bytes(sock, payload_size)
+        recv_version = MsgSerializable.from_bytes(header + payload)
 
         node.version = int(recv_version.nVersion)
         node.services = int(recv_version.nServices)

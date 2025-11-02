@@ -18,6 +18,7 @@ License: MIT
 import ast
 import re
 import socket
+import struct
 import sys
 import textwrap
 import threading
@@ -39,6 +40,7 @@ from zlib import decompress
 import requests
 from bitcoin.messages import (
     msg_version as BitcoinMsgver,
+    msg_verack as BitcoinMsgvack,
     MsgSerializable
 )
 from bitcoin.rpc import (
@@ -487,13 +489,13 @@ def getdata_node(node: Node) -> Optional[Node]:
         sock.settimeout(5)
 
     def read_bytes(sock: socksocket, length: int) -> bytes:
-        data = b''
-        while len(data) < length:
-            chunk = sock.recv(length - len(data))
+        recvbuf = b''
+        while len(recvbuf) < length:
+            chunk = sock.recv(length - len(recvbuf))
             if not chunk:
-                raise ConnectionResetError
-            data += chunk
-        return data
+                raise RuntimeError
+            recvbuf += chunk
+        return recvbuf
 
     try:
         address, port = split_addressport(node.addr)
@@ -503,19 +505,23 @@ def getdata_node(node: Node) -> Optional[Node]:
         msg_version.fRelay = False
         sock.send(msg_version.to_bytes())
 
-        header = read_bytes(sock, 24)
-        payload_size = int.from_bytes(header[16:20], byteorder='little')
-        payload = read_bytes(sock, payload_size)
-        recv_version = MsgSerializable.from_bytes(header + payload)
-
-        node.version = int(recv_version.nVersion)
-        node.services = int(recv_version.nServices)
-        node.subver = recv_version.strSubVer.decode('utf-8', errors='ignore')
+        while True:
+            header = read_bytes(sock, 24)
+            payload = read_bytes(sock, int.from_bytes(header[16:20], byteorder='little'))
+            match header[4:16].rstrip(b'\x00'):
+                case b'version':
+                    msg_version = MsgSerializable.from_bytes(header + payload)
+                    node.version = int(msg_version.nVersion)
+                    node.services = int(msg_version.nServices)
+                    node.subver = msg_version.strSubVer.decode('utf-8', errors='ignore')
+                    sock.send(BitcoinMsgvack().to_bytes())
+                case b'feefilter':
+                    node.minfeefilter = float(struct.unpack('<Q', payload)[0]) / 100000000
+                    break
     except Exception: # pylint: disable=broad-exception-caught
-        return None
-    finally:
-        sock.close()
+        pass
 
+    sock.close()
     return node
 
 def load_allnodes():
@@ -711,14 +717,15 @@ def probe_nodes():
     with ThreadPoolExecutor(max_workers=30) as executor:
         futures = [executor.submit(getdata_node, node) for node in empty_nodes]
         for future in as_completed(futures):
-            data = future.result()
-            if not data:
+            node = future.result()
+            if not node or node.is_empty():
                 continue
-            address, _ = split_addressport(data.addr)
+            address, _ = split_addressport(node.addr)
             allnodes[address].conntime = int(time())
-            allnodes[address].services = data.services
-            allnodes[address].version = data.version
-            allnodes[address].subver = data.subver
+            allnodes[address].services = node.services
+            allnodes[address].version = node.version
+            allnodes[address].subver = node.subver
+            allnodes[address].minfeefilter = node.minfeefilter
     stamp('Probe nodes thread exit')
 
 def snapshot_bitnodes():

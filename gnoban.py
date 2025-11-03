@@ -767,14 +767,15 @@ def snapshot_bitnodes():
         else:
             network = 'ipv4'
 
-        allnodes[address] = Node(
-            addr=addressport,
-            network=network,
-            conntime=conntime,
-            services=int(info[3]),
-            version=int(info[0]),
-            subver=info[1]
-        )
+        if not node:
+            allnodes[address] = Node(
+                addr=addressport,
+                network=network
+            )
+        allnodes[address].conntime = conntime
+        allnodes[address].services = int(info[3])
+        allnodes[address].version = int(info[0])
+        allnodes[address].subver = info[1]
 
     mark(Status.OK, f'{message}. ({len(nodeaddresses)} entries)')
 

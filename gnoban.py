@@ -579,7 +579,29 @@ def load_listbanned():
         clean_exit(1)
 
     listbanned.clear()
-    listbanned.extend(node['address'].split('/')[0] for node in bannedaddresses)
+    for node in bannedaddresses:
+        address = node['address'].split('/')[0]
+        listbanned.append(address)
+
+        if not options['enable_unban']:
+            continue
+
+        if address.endswith('.onion'):
+            network = 'onion'
+        elif address.endswith('.b32.i2p'):
+            network = 'i2p'
+        elif ':' in address:
+            network = 'cjdns' if address.startswith('fc') else 'ipv6'
+        else:
+            network = 'ipv4'
+
+        port = 0 if network == 'i2p' else 8333
+        addr = f'[{address}]:{port}' if ':' in address else f'{address}:{port}'
+        allnodes[address] = Node(
+            addr=addr,
+            network=network
+        )
+
     mark(Status.OK, f'{message}. ({len(listbanned)} entries)')
 
 # pylint: disable=too-many-branches
@@ -709,13 +731,17 @@ def probe_nodes():
     Uses a thread pool to concurrently connect to nodes that have not yet been contacted.
     Updates each node's connection time, version, services, and user agent upon success.
     """
-    empty_nodes = [node for addr, node in list(allnodes.items()) if not node.conntime]
-    if not empty_nodes:
+    if options['enable_unban']:
+        list_nodes = list(allnodes.values())
+    else:
+        list_nodes = [node for node in list(allnodes.values()) if node.is_empty()]
+
+    if not list_nodes:
         return
 
     stamp('Probe nodes thread start')
     with ThreadPoolExecutor(max_workers=30) as executor:
-        futures = [executor.submit(getdata_node, node) for node in empty_nodes]
+        futures = [executor.submit(getdata_node, node) for node in list_nodes]
         for future in as_completed(futures):
             node = future.result()
             if not node or node.is_empty():

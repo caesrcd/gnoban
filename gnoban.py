@@ -7,8 +7,8 @@
 gnoban.py - A script to analyze and ban Bitcoin nodes based on custom criteria.
 
 This script evaluates known nodes on your local full node and the Bitnodes Snapshot API.
-It supports filtering by service flags, user agent, and protocol version to ban remote
-nodes on your full node.
+It supports filtering by minimum fee rate, service flags, user agent, and protocol version
+to ban remote nodes on your full node.
 
 Author: CaesarCoder <caesrcd@tutamail.com>
 License: MIT
@@ -97,6 +97,7 @@ class Filter:
     Each attribute is an optional list used to match against node data.
     Attributes:
         - filter_expr: A filter expression (logical string condition).
+        - minfeefilter: Minimum fee rate (in BTC/kvB) to match.
         - service: List of service flags to match.
         - useragent: List of user agent strings to match.
         - version: List of protocol versions to match.
@@ -121,6 +122,7 @@ class Node:
         - services: Service flags advertised by the node.
         - version: Protocol version used by the node.
         - subver: User agent string of the node.
+        - minfeefilter: Minimum fee rate of the node.
     """
     addr: str
     network: str
@@ -180,10 +182,13 @@ DEFAULT_TOR_SOCKS_PORT: int = 9050
 # Default ban duration in seconds (1 year)
 BANTIME: int = 365 * 24 * 60 * 60
 
+# List of banned addresses
 listbanned: List[str] = []
 
+# Default initial options
 options: dict = {'enable_unban': False}
 
+# Default settings for bitcoin.rpc.Proxy
 rpc_conf: dict = {
     'service_url': None,
     'btc_conf_file': None,
@@ -207,11 +212,10 @@ def banner():
 
 def build_parser() -> ArgumentParser:
     """
-    Constructs and returns the command-line argument parser.
+    Builds and returns the command-line argument parser.
 
-    Defines supported options for filtering nodes by service flags, user agent strings,
-    protocol versions, and proxy settings. Includes usage help, examples, and service
-    flag definitions in the epilog.
+    Defines the supported options and filtering criteria for running the script.
+    Includes help and usage examples.
     """
     parser = ArgumentParser(
         add_help=False,
@@ -854,25 +858,17 @@ def start():
         check_bitcoind()
         load_listbanned()
         load_allnodes()
-
-        next_bitnodes_refresh = time()
-        only_recents = False
         while True:
-            now = time()
-
-            if now >= next_bitnodes_refresh:
-                snapshot_bitnodes()
-                next_bitnodes_refresh = now + 10800
-                only_recents = False
-                with threadctl.lock:
-                    if threadctl.thread is None or not threadctl.thread.is_alive():
-                        threadctl.thread = threading.Thread(target=probe_nodes)
-                        threadctl.thread.start()
-
+            with threadctl.lock:
+                if threadctl.thread is None or not threadctl.thread.is_alive():
+                    snapshot_bitnodes()
+                    threadctl.thread = threading.Thread(target=probe_nodes)
+                    threadctl.thread.start()
+                    only_recents = False
+                else:
+                    only_recents = True
             exec_getpeerinfo()
             exec_setban(only_recents)
-            only_recents = True
-
             sleep(10)
     except KeyboardInterrupt:
         clean_exit(0)

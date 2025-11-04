@@ -732,8 +732,8 @@ def snapshot_bitnodes():
     """
     Downloads the latest node snapshot from Bitnodes API and updates the `allnodes` map.
 
-    Nodes with outdated connection timestamps or missing subversion info are replaced.
-    Applies network type heuristics (IPv4, IPv6, or Onion) based on address format.
+    Updates the `allnodes` map with addresses of missing nodes so that the information
+    can be accurately consulted later.
     """
     message = 'Downloading latest snapshot from Bitnodes'
     mark(Status.EMPTY, f'{message}...')
@@ -750,14 +750,10 @@ def snapshot_bitnodes():
         mark(Status.FAILED, f'Error: {e}')
         return
 
-    for addressport, info in nodeaddresses.items():
-        if len(info) < 3:
-            continue
-
-        conntime = int(info[2])
+    address_count = 0
+    for addressport in nodeaddresses:
         address, _ = split_addressport(addressport)
-        node = allnodes.get(address)
-        if node and conntime < node.conntime and node.subver != '':
+        if allnodes.get(address):
             continue
 
         if address.endswith('.onion'):
@@ -767,17 +763,13 @@ def snapshot_bitnodes():
         else:
             network = 'ipv4'
 
-        if not node:
-            allnodes[address] = Node(
-                addr=addressport,
-                network=network
-            )
-        allnodes[address].conntime = conntime
-        allnodes[address].services = int(info[3])
-        allnodes[address].version = int(info[0])
-        allnodes[address].subver = info[1]
+        allnodes[address] = Node(
+            addr=addressport,
+            network=network
+        )
+        address_count += 1
 
-    mark(Status.OK, f'{message}. ({len(nodeaddresses)} entries)')
+    mark(Status.OK, f'{message}. ({address_count} entries)')
 
 def split_addressport(addressport: str, dport: int=8333) -> Tuple[str, int]:
     """

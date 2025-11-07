@@ -166,10 +166,31 @@ class ThreadState:
         - lock: Threading lock used for synchronization.
         - stop: Event used to signal thread termination.
         - thread: Reference to the running thread instance.
+        - started_at: Timestamp when the thread started.
+        - finished_at: Timestamp when the thread finished.
     """
     lock: threading.Lock = field(default_factory=threading.Lock)
     stop: threading.Event = field(default_factory=threading.Event)
     thread: Optional[threading.Thread] = None
+    started_at: float = 0
+    finished_at: float = 0
+
+    def should_wait(self) -> bool:
+        """
+        Checks if the thread should wait before starting again.
+        Returns True if still in waiting period, False otherwise.
+
+        Waiting periods:
+            - No wait on first run (finished_at == 0)
+            - 900 seconds (15 min) after successful run with nodes
+            - 3600 seconds (1 hour) after run with no nodes (duration < 10s)
+        """
+        if not self.finished_at:
+            return False
+        elapsed = time() - self.finished_at
+        duration = self.finished_at - self.started_at
+        wait_time = 900 if duration > 10 else 3600
+        return elapsed < wait_time
 
 threadctl = ThreadState()
 
@@ -582,7 +603,6 @@ def load_listbanned():
         mark(Status.FAILED, f'Error: {e}')
         clean_exit(1)
 
-    listbanned.clear()
     for node in bannedaddresses:
         address = node['address'].split('/')[0]
         listbanned.append(address)
@@ -735,16 +755,19 @@ def probe_nodes():
     Uses a thread pool to concurrently connect to nodes that have not yet been contacted.
     Updates each node's connection time, version, services, and user agent upon success.
     """
+    threadctl.started_at = time()
+
     if options['enable_unban']:
         list_nodes = list(allnodes.values())
     else:
         list_nodes = [node for node in list(allnodes.values()) if node.is_empty()]
 
     if not list_nodes:
+        stamp('No nodes found. Probe nodes thread paused for 1 hour')
+        threadctl.finished_at = time()
         return
 
-    stamp('Probe nodes thread start')
-    with ThreadPoolExecutor(max_workers=30) as executor:
+    with ThreadPoolExecutor(max_workers=16) as executor:
         futures = [executor.submit(getdata_node, node) for node in list_nodes]
         for future in as_completed(futures):
             node = future.result()
@@ -756,7 +779,13 @@ def probe_nodes():
             allnodes[address].version = node.version
             allnodes[address].subver = node.subver
             allnodes[address].minfeefilter = node.minfeefilter
-    stamp('Probe nodes thread exit')
+
+    if threadctl.stop.is_set():
+        stamp('Probe nodes thread exited')
+    else:
+        stamp('Probe nodes thread paused for 15 minutes')
+
+    threadctl.finished_at = time()
 
 def snapshot_bitnodes():
     """
@@ -856,12 +885,17 @@ def start():
     banner()
     try:
         check_bitcoind()
-        load_listbanned()
-        load_allnodes()
         while True:
             with threadctl.lock:
-                if threadctl.thread is None or not threadctl.thread.is_alive():
+                thread_dead = threadctl.thread is None or not threadctl.thread.is_alive()
+                if thread_dead and not threadctl.should_wait():
+                    listbanned.clear()
+                    allnodes.clear()
+                    load_listbanned()
+                    load_allnodes()
                     snapshot_bitnodes()
+                    msg = {True: 'started', False: 'resumed'}[threadctl.thread is None]
+                    stamp(f'Probe nodes thread {msg}')
                     threadctl.thread = threading.Thread(target=probe_nodes)
                     threadctl.thread.start()
                     only_recents = False

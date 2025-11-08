@@ -16,6 +16,7 @@ License: MIT
 
 # Python module imports
 import ast
+import logging
 import re
 import socket
 import struct
@@ -32,6 +33,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, StrEnum
+from logging import Logger
 from time import time, sleep
 from typing import Dict, List, Optional, Tuple, Union
 from zlib import decompress
@@ -206,6 +208,9 @@ BANTIME: int = 365 * 24 * 60 * 60
 # List of banned addresses
 listbanned: List[str] = []
 
+# Default logger for recording log messages
+logger: Logger = logging.getLogger(__name__)
+
 # Default initial options
 options: dict = {'enable_unban': False}
 
@@ -298,19 +303,18 @@ def check_bitcoind():
     Displays a status message based on the result, and exits if the check fails due to
     connection or permission errors.
     """
-    message = 'Checking access to bitcoin node via RPC'
-    mark(Status.EMPTY, f'{message}...')
+    mark(Status.EMPTY, 'Checking access to bitcoin node via RPC...')
 
     try:
         BitcoinRPCProxy(**rpc_conf).call('uptime')
     except JSONRPCError as e:
-        mark(Status.FAILED, f"Error: {e.args[0].get('message')}")
+        mark(Status.FAILED, e.args[0].get('message'))
         clean_exit(1)
     except Exception as e: # pylint: disable=broad-exception-caught
-        mark(Status.FAILED, f'Error: {e}')
+        mark(Status.FAILED, e)
         clean_exit(1)
 
-    mark(Status.OK, f"{message}.{' ' * 5}")
+    mark(Status.OK, f"Checked access to bitcoin node via RPC.{' ' * 5}")
 
 def clean_exit(code: int, exec_exit: bool=True):
     """
@@ -387,11 +391,11 @@ def exec_getpeerinfo():
         peerinfo = rpc_proxy.call('getpeerinfo')
     except JSONRPCError as e:
         mark(Status.FAILED,
-            f'Could not load peers info.'
-            f"\r\nError: {e.args[0].get('message')}", False)
+            'Could not load peers info. '
+            f"[{e.args[0].get('message')}]", False)
         return
     except Exception as e: # pylint: disable=broad-exception-caught
-        mark(Status.FAILED, f'Could not load peers info.\r\nError: {e}', False)
+        mark(Status.FAILED, f'Could not load peers info. [{e}]', False)
         return
 
     for peer in peerinfo:
@@ -426,13 +430,13 @@ def exec_getpeerinfo():
                 if e.args[0].get('code') != -29:
                     mark(Status.FAILED,
                         f'Could not disconnect address {node.addr} '
-                        f'({str(node.version)}{node.subver})'
-                        f"\r\nError: {e.args[0].get('message')}", False)
+                        f'({str(node.version)}{node.subver}) '
+                        f"[{e.args[0].get('message')}]", False)
             except Exception as e: # pylint: disable=broad-exception-caught
                 mark(Status.FAILED,
                     f'Could not disconnect address {node.addr} '
-                    f'({str(node.version)}{node.subver})'
-                    f'\r\nError: {e}', False)
+                    f'({str(node.version)}{node.subver}) '
+                    f'[{e}]', False)
             continue
 
 def exec_setban(only_recents: bool):
@@ -476,10 +480,10 @@ def exec_setban(only_recents: bool):
             elif e.args[0].get('code') == -30:
                 stamp(f'{msg} (already unbanned)')
             else:
-                mark(Status.FAILED, f"{msg}\r\nError: {e.args[0].get('message')}", False)
+                mark(Status.FAILED, f"{msg} [{e.args[0].get('message')}]", False)
         except Exception as e: # pylint: disable=broad-exception-caught
             msg = f'Unable to send the setban request to {address}'
-            mark(Status.FAILED, f'{msg}\r\nError: {e}', False)
+            mark(Status.FAILED, f'{msg} [{e}]', False)
 
 def getdata_node(node: Node) -> Optional[Node]:
     """
@@ -557,18 +561,17 @@ def load_allnodes():
     'getaddrmaninfo', then fetches detailed node address information with 'getnodeaddresses'.
     It populates the global allnodes dict with Node instances keyed by their IP address.
     """
-    message = 'Loading known addresses'
-    mark(Status.EMPTY, f'{message}...')
+    mark(Status.EMPTY, 'Loading known addresses...')
 
     try:
         nodeaddresses = BitcoinRPCProxy(
             **(rpc_conf | {'timeout': 300})
         ).call('getnodeaddresses', 0)
     except JSONRPCError as e:
-        mark(Status.FAILED, f"Error: {e.args[0].get('message')}")
+        mark(Status.FAILED, e.args[0].get('message'))
         clean_exit(1)
     except Exception as e: # pylint: disable=broad-exception-caught
-        mark(Status.FAILED, f'Error: {e}')
+        mark(Status.FAILED, e)
         clean_exit(1)
 
     for node in nodeaddresses:
@@ -581,7 +584,7 @@ def load_allnodes():
             network=node['network']
         )
 
-    mark(Status.OK, f'{message}. ({len(nodeaddresses)} entries)')
+    mark(Status.OK, f'Loaded known addresses ({len(nodeaddresses)} entries).')
 
 def load_listbanned():
     """
@@ -591,16 +594,15 @@ def load_listbanned():
     currently banned addresses, clears the existing listbanned, and updates it
     with the IP addresses extracted from the banned entries.
     """
-    message = 'Loading banned addresses'
-    mark(Status.EMPTY, f'{message}...')
+    mark(Status.EMPTY, 'Loading banned addresses...')
 
     try:
         bannedaddresses = BitcoinRPCProxy(**rpc_conf).call('listbanned')
     except JSONRPCError as e:
-        mark(Status.FAILED, f"Error: {e.args[0].get('message')}")
+        mark(Status.FAILED, e.args[0].get('message'))
         clean_exit(1)
     except Exception as e: # pylint: disable=broad-exception-caught
-        mark(Status.FAILED, f'Error: {e}')
+        mark(Status.FAILED, e)
         clean_exit(1)
 
     for node in bannedaddresses:
@@ -626,7 +628,7 @@ def load_listbanned():
             network=network
         )
 
-    mark(Status.OK, f'{message}. ({len(listbanned)} entries)')
+    mark(Status.OK, f'Loaded banned addresses ({len(listbanned)} entries).')
 
 # pylint: disable=too-many-branches
 def main():
@@ -715,6 +717,11 @@ def mark(status: Union[Color, Status], text: str, answer: bool=True):
     sys.stdout.write(msg)
     sys.stdout.flush()
 
+    if status == Status.FAILED:
+        logger.error(text)
+    else:
+        logger.info(text)
+
 def match_node(node: Node) -> bool:
     """
     Check if a node matches the defined criteria.
@@ -794,8 +801,7 @@ def snapshot_bitnodes():
     Updates the `allnodes` map with addresses of missing nodes so that the information
     can be accurately consulted later.
     """
-    message = 'Downloading latest snapshot from Bitnodes'
-    mark(Status.EMPTY, f'{message}...')
+    mark(Status.EMPTY, 'Downloading latest snapshot from Bitnodes...')
 
     try:
         response = requests.get(
@@ -806,7 +812,7 @@ def snapshot_bitnodes():
         data = response.json()
         nodeaddresses = data.get('nodes', {})
     except requests.RequestException as e:
-        mark(Status.FAILED, f'Error: {e}')
+        mark(Status.FAILED, e)
         return
 
     address_count = 0
@@ -828,7 +834,7 @@ def snapshot_bitnodes():
         )
         address_count += 1
 
-    mark(Status.OK, f'{message}. ({address_count} entries)')
+    mark(Status.OK, f'Downloaded latest snapshot from Bitnodes ({address_count} entries).')
 
 def split_addressport(addressport: str, dport: int=8333) -> Tuple[str, int]:
     """
@@ -873,6 +879,7 @@ def stamp(text: str):
             pass
         sys.stderr.write(f'\r\n{Color.CYN}{date}{Color.RST} {text}')
         sys.stderr.flush()
+    logger.info(text)
 
 def start():
     """
@@ -906,6 +913,16 @@ def start():
             sleep(10)
     except KeyboardInterrupt:
         clean_exit(0)
+
+# Configure logger to write to debug.log file only (no console output)
+# Level: INFO | Mode: append | Format: local timestamp (ISO 8601-like, no timezone)
+logger.setLevel(logging.INFO)
+file_handler = logging.FileHandler('debug.log', mode='a', encoding='utf-8')
+file_handler.setFormatter(logging.Formatter(
+    fmt='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%dT%H:%M:%S'
+))
+logger.addHandler(file_handler)
 
 if __name__ == '__main__':
     main()

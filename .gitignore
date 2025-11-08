@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 myenv/
 .env
+debug.log

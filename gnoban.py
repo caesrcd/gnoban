@@ -574,7 +574,10 @@ def load_allnodes():
         mark(Status.FAILED, e)
         clean_exit(1)
 
+    address_count = 0
     for node in nodeaddresses:
+        if allnodes.get(node['address']):
+            continue
         if node['network'] in {'ipv6', 'cjdns'}:
             addr = f"[{node['address']}]:{node['port']}"
         else:
@@ -583,8 +586,9 @@ def load_allnodes():
             addr=addr,
             network=node['network']
         )
+        address_count += 1
 
-    mark(Status.OK, f'Loaded known addresses ({len(nodeaddresses)} entries).')
+    mark(Status.OK, f'Loaded known addresses ({address_count} entries).')
 
 def load_listbanned():
     """
@@ -605,11 +609,12 @@ def load_listbanned():
         mark(Status.FAILED, e)
         clean_exit(1)
 
+    listbanned.clear()
     for node in bannedaddresses:
         address = node['address'].split('/')[0]
         listbanned.append(address)
 
-        if not options['enable_unban']:
+        if not options['enable_unban'] or allnodes.get(address):
             continue
 
         if address.endswith('.onion'):
@@ -896,8 +901,6 @@ def start():
             with threadctl.lock:
                 thread_dead = threadctl.thread is None or not threadctl.thread.is_alive()
                 if thread_dead and not threadctl.should_wait():
-                    listbanned.clear()
-                    allnodes.clear()
                     load_listbanned()
                     load_allnodes()
                     snapshot_bitnodes()

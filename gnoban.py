@@ -307,10 +307,10 @@ def check_bitcoind():
     try:
         BitcoinRPCProxy(**rpc_conf).call('uptime')
     except JSONRPCError as e:
-        mark(Status.FAILED, e.args[0].get('message'))
+        mark(Status.FAILED, f"{e.args[0].get('message')}\r\n")
         sys.exit(1)
     except Exception as e: # pylint: disable=broad-exception-caught
-        mark(Status.FAILED, e)
+        mark(Status.FAILED, f'{e}\r\n')
         sys.exit(1)
 
     mark(Status.OK, f"Checked access to bitcoin node via RPC.{' ' * 5}")
@@ -544,10 +544,10 @@ def load_allnodes():
             **(rpc_conf | {'timeout': 300})
         ).call('getnodeaddresses', 0)
     except JSONRPCError as e:
-        mark(Status.FAILED, e.args[0].get('message'))
+        mark(Status.FAILED, f"{e.args[0].get('message')}\r\n")
         sys.exit(1)
     except Exception as e: # pylint: disable=broad-exception-caught
-        mark(Status.FAILED, e)
+        mark(Status.FAILED, f'{e}\r\n')
         sys.exit(1)
 
     address_count = 0
@@ -579,10 +579,10 @@ def load_listbanned():
     try:
         bannedaddresses = BitcoinRPCProxy(**rpc_conf).call('listbanned')
     except JSONRPCError as e:
-        mark(Status.FAILED, e.args[0].get('message'))
+        mark(Status.FAILED, f"{e.args[0].get('message')}\r\n")
         sys.exit(1)
     except Exception as e: # pylint: disable=broad-exception-caught
-        mark(Status.FAILED, e)
+        mark(Status.FAILED, f'{e}\r\n')
         sys.exit(1)
 
     listbanned.clear()
@@ -887,7 +887,7 @@ def start():
             exec_setban(only_recents)
             sleep(10)
     except KeyboardInterrupt:
-        stamp('Shutdown: done')
+        stamp('Shutdown: done\r\n')
         os._exit(0)
 
 # Configure logger to write to debug.log file only (no console output)

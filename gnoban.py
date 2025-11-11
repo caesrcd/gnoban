@@ -17,6 +17,7 @@ License: MIT
 # Python module imports
 import ast
 import logging
+import os
 import re
 import socket
 import struct
@@ -166,13 +167,11 @@ class ThreadState:
 
     Attributes:
         - lock: Threading lock used for synchronization.
-        - stop: Event used to signal thread termination.
         - thread: Reference to the running thread instance.
         - started_at: Timestamp when the thread started.
         - finished_at: Timestamp when the thread finished.
     """
     lock: threading.Lock = field(default_factory=threading.Lock)
-    stop: threading.Event = field(default_factory=threading.Event)
     thread: Optional[threading.Thread] = None
     started_at: float = 0
     finished_at: float = 0
@@ -309,32 +308,12 @@ def check_bitcoind():
         BitcoinRPCProxy(**rpc_conf).call('uptime')
     except JSONRPCError as e:
         mark(Status.FAILED, e.args[0].get('message'))
-        clean_exit(1)
+        sys.exit(1)
     except Exception as e: # pylint: disable=broad-exception-caught
         mark(Status.FAILED, e)
-        clean_exit(1)
+        sys.exit(1)
 
     mark(Status.OK, f"Checked access to bitcoin node via RPC.{' ' * 5}")
-
-def clean_exit(code: int, exec_exit: bool=True):
-    """
-    Gracefully shuts down the background thread and optionally exits the program.
-
-    Ensures that if a background thread is running, it is signaled to stop and joined
-    before continuing. Optionally calls sys.exit() with the given exit code.
-
-    Parameters:
-        - code: Exit code to return if exiting the program.
-        - exec_exit: Whether to actually call sys.exit(). Defaults to True.
-    """
-    with threadctl.lock:
-        if threadctl.thread is not None and threadctl.thread.is_alive():
-            stamp('Shutdown: In progress...')
-            threadctl.stop.set()
-            threadctl.thread.join()
-            stamp('Shutdown: done')
-    if exec_exit:
-        sys.exit(code)
 
 def compile_node_filter(expr: str) -> str:
     """
@@ -499,9 +478,6 @@ def getdata_node(node: Node) -> Optional[Node]:
     Returns:
         - Node: The updated node object with version info if successful.
     """
-    if threadctl.stop.is_set():
-        return None
-
     if not proxy.ip and node.network in {'ipv6', 'cjdns'}:
         sock = socksocket(socket.AF_INET6)
     else:
@@ -569,10 +545,10 @@ def load_allnodes():
         ).call('getnodeaddresses', 0)
     except JSONRPCError as e:
         mark(Status.FAILED, e.args[0].get('message'))
-        clean_exit(1)
+        sys.exit(1)
     except Exception as e: # pylint: disable=broad-exception-caught
         mark(Status.FAILED, e)
-        clean_exit(1)
+        sys.exit(1)
 
     address_count = 0
     for node in nodeaddresses:
@@ -604,10 +580,10 @@ def load_listbanned():
         bannedaddresses = BitcoinRPCProxy(**rpc_conf).call('listbanned')
     except JSONRPCError as e:
         mark(Status.FAILED, e.args[0].get('message'))
-        clean_exit(1)
+        sys.exit(1)
     except Exception as e: # pylint: disable=broad-exception-caught
         mark(Status.FAILED, e)
-        clean_exit(1)
+        sys.exit(1)
 
     listbanned.clear()
     for node in bannedaddresses:
@@ -672,7 +648,7 @@ def main():
             criteria.useragent = args.useragent
         except re.error as e:
             print(f'Invalid regex for -u: {e}')
-            clean_exit(1)
+            sys.exit(1)
 
     if args.version:
         criteria.version = args.version
@@ -689,7 +665,7 @@ def main():
         except Exception as e: # pylint: disable=broad-exception-caught
             msg = getattr(e, 'msg', str(e))
             print(f'Invalid filter expression: {msg}')
-            clean_exit(1)
+            sys.exit(1)
 
     if args.proxy:
         proxy.ip, proxy.port = split_addressport(args.proxy, DEFAULT_TOR_SOCKS_PORT)
@@ -792,11 +768,7 @@ def probe_nodes():
             allnodes[address].subver = node.subver
             allnodes[address].minfeefilter = node.minfeefilter
 
-    if threadctl.stop.is_set():
-        stamp('Probe nodes thread exited')
-    else:
-        stamp('Probe nodes thread paused for 15 minutes')
-
+    stamp('Probe nodes thread paused for 15 minutes')
     threadctl.finished_at = time()
 
 def snapshot_bitnodes():
@@ -915,7 +887,8 @@ def start():
             exec_setban(only_recents)
             sleep(10)
     except KeyboardInterrupt:
-        clean_exit(0)
+        stamp('Shutdown: done')
+        os._exit(0)
 
 # Configure logger to write to debug.log file only (no console output)
 # Level: INFO | Mode: append | Format: local timestamp (ISO 8601-like, no timezone)

@@ -4,7 +4,7 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or https://opensource.org/licenses/mit-license.php.
 """
-gnoban.py - A script to analyze and ban Bitcoin nodes based on custom criteria.
+GNOBAN - A script to analyze and ban Bitcoin nodes based on custom criteria.
 
 This script evaluates known nodes on your local full node and the Bitnodes Snapshot API.
 It supports filtering by minimum fee rate, service flags, user agent, and protocol version
@@ -51,6 +51,9 @@ from bitcoin.rpc import (
     Proxy as BitcoinRPCProxy
 )
 from socks import socksocket, SOCKS5
+
+# Current program version (Semantic Versioning)
+__version__ = '1.0.0'
 
 class Color(StrEnum):
     """
@@ -244,7 +247,7 @@ def build_parser() -> ArgumentParser:
     """
     parser = ArgumentParser(
         add_help=False,
-        usage='python %(prog)s [options]... [criteria]...',
+        usage='%(prog)s [options]... [criteria]...',
         description=(
             'Scan and evaluate known nodes to determine which should be banned '
             'based on specified criteria.'
@@ -261,9 +264,9 @@ def build_parser() -> ArgumentParser:
               srv <num>              Match if service flag is present.
 
             Examples:
-              python %(prog)s -f '(ua "Knots" or srv 26) and not srv 29'
-              python %(prog)s -conf /mnt/btc/bitcoin.conf --unban -m 0.000009
-              python %(prog)s -rpcurl http://user:pass@192.168.0.10:8332 -u 'Knots'
+              %(prog)s -f '(ua "Knots" or srv 26) and not srv 29'
+              %(prog)s -conf /mnt/btc/bitcoin.conf --unban -m 0.000009
+              %(prog)s -rpcurl http://user:pass@192.168.0.10:8332 -u 'Knots'
 
             Note:
               When using simple filters (-m, -s, -u, -v) alongside -f, nodes matching *any* of the conditions will be selected.
@@ -280,6 +283,14 @@ def build_parser() -> ArgumentParser:
         help='Specify the Bitcoin node RPC endpoint.')
     argrp_opt.add_argument('--unban', action='store_true',
         help='Enable unbanning of nodes that do not meet the criteria.')
+    argrp_opt.add_argument('--version', action='version',
+        version=textwrap.dedent(f'''
+            %(prog)s (GNOBAN) v{__version__}
+            Copyright (C) 2025 CaesarCoder <caesrcd@tutamail.com>
+            Distributed under the MIT software license, see the accompanying
+            file COPYING or https://opensource.org/licenses/mit-license.php.
+            '''),
+        help='Show version information.')
     argrp_cri = parser.add_argument_group('Criteria')
     argrp_cri.add_argument('-f', '--filter', metavar="'expr'", type=str,
         help='Filter nodes using logical expressions.')
@@ -867,6 +878,7 @@ def start():
     at fixed intervals. Handles graceful termination on keyboard interrupt.
     """
     banner()
+    logger.info('GNOBAN version v%s', __version__)
     try:
         check_bitcoind()
         while True:

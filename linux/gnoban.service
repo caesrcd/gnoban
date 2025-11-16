@@ -1,0 +1,50 @@
+[Unit]
+Description=Global Node Search & Ban (GNOBAN)
+Documentation=https://github.com/caesrcd/gnoban/blob/master/README.md
+
+# https://www.freedesktop.org/wiki/Software/systemd/NetworkTarget/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/gnoban/gnoban.conf
+ExecStart=gnoban $GNOBAN_ARGS
+ExecStartPre=systemd-cat -t gnoban echo "${GNOBAN_ARGS}"
+
+# Process management
+####################
+
+Type=exec
+KillSignal=SIGINT
+Restart=on-failure
+RestartSec=120
+StandardOutput=null
+
+# Directory creation and permissions
+####################################
+
+# Run as gnoban:gnoban
+User=gnoban
+
+# /var/log/gnoban
+LogsDirectory=gnoban
+WorkingDirectory=/var/log/gnoban
+
+# /var/cache/gnoban
+CacheDirectory=gnoban
+CacheDirectoryMode=0750
+Environment="XDG_CACHE_HOME=/var/cache/gnoban"
+
+# Hardening measures
+####################
+
+MemoryDenyWriteExecute=true
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

@@ -30,7 +30,7 @@ from argparse import (
     SUPPRESS
 )
 from base64 import b64decode
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, StrEnum
@@ -755,29 +755,43 @@ def probe_nodes():
     Updates each node's connection time, version, services, and user agent upon success.
     """
     threadctl.started_at = time()
+    nodes_snapshot = list(allnodes.values())
 
     if options['enable_unban']:
-        list_nodes = list(allnodes.values())
+        has_nodes = bool(nodes_snapshot)
     else:
-        list_nodes = [node for node in list(allnodes.values()) if node.is_empty()]
+        has_nodes = any(node.is_empty() for node in nodes_snapshot)
 
-    if not list_nodes:
+    if not has_nodes:
         stamp('No nodes found. Probe nodes thread paused for 1 hour')
         threadctl.finished_at = time()
         return
 
     with ThreadPoolExecutor(max_workers=16) as executor:
-        futures = [executor.submit(getdata_node, node) for node in list_nodes]
-        for future in as_completed(futures):
-            node = future.result()
-            if not node or node.is_empty():
-                continue
-            address, _ = split_addressport(node.addr)
-            allnodes[address].conntime = int(time())
-            allnodes[address].services = node.services
-            allnodes[address].version = node.version
-            allnodes[address].subver = node.subver
-            allnodes[address].minfeefilter = node.minfeefilter
+        futures = set()
+        nodes_to_process = (node for node in nodes_snapshot
+            if options['enable_unban'] or node.is_empty())
+
+        def submit_batch():
+            for node in nodes_to_process:
+                futures.add(executor.submit(getdata_node, node))
+                if len(futures) >= 100:
+                    break
+
+        submit_batch()
+        while futures:
+            done, futures = wait(futures, return_when=FIRST_COMPLETED)
+            for future in done:
+                node = future.result()
+                if not node or node.is_empty():
+                    continue
+                address, _ = split_addressport(node.addr)
+                allnodes[address].conntime = int(time())
+                allnodes[address].services = node.services
+                allnodes[address].version = node.version
+                allnodes[address].subver = node.subver
+                allnodes[address].minfeefilter = node.minfeefilter
+            submit_batch()
 
     stamp('Probe nodes thread paused for 15 minutes')
     threadctl.finished_at = time()

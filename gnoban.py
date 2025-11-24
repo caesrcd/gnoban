@@ -391,8 +391,8 @@ def exec_getpeerinfo():
     for peer in peerinfo:
         conntime = peer.get('conntime')
         network = peer.get('network')
-        subver = peer.get('subver')
-        if int(time()) - conntime <= 15 or not subver or network == 'not_publicly_routable':
+        version = peer.get('version')
+        if int(time()) - conntime <= 15 or not version or network == 'not_publicly_routable':
             continue
 
         node = Node(
@@ -400,8 +400,8 @@ def exec_getpeerinfo():
             network=network,
             services=int(peer.get('services'), 16),
             conntime=conntime,
-            version=peer.get('version'),
-            subver=subver,
+            version=version,
+            subver=peer.get('subver'),
             minfeefilter=float(peer.get('minfeefilter'))
         )
 

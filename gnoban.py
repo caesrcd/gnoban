@@ -878,7 +878,18 @@ def start():
     at fixed intervals. Handles graceful termination on keyboard interrupt.
     """
     banner()
+
+    # Configure logger to write to debug.log file only (no console output)
+    # Level: INFO | Mode: append | Format: local timestamp (ISO 8601-like, no timezone)
+    logger.setLevel(logging.INFO)
+    file_handler = logging.FileHandler('debug.log', mode='a', encoding='utf-8')
+    file_handler.setFormatter(logging.Formatter(
+        fmt='%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%dT%H:%M:%S'
+    ))
+    logger.addHandler(file_handler)
     logger.info('GNOBAN version v%s', __version__)
+
     try:
         check_bitcoind()
         while True:
@@ -901,16 +912,6 @@ def start():
     except KeyboardInterrupt:
         stamp('Shutdown: done\r\n')
         os._exit(0)
-
-# Configure logger to write to debug.log file only (no console output)
-# Level: INFO | Mode: append | Format: local timestamp (ISO 8601-like, no timezone)
-logger.setLevel(logging.INFO)
-file_handler = logging.FileHandler('debug.log', mode='a', encoding='utf-8')
-file_handler.setFormatter(logging.Formatter(
-    fmt='%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%Y-%m-%dT%H:%M:%S'
-))
-logger.addHandler(file_handler)
 
 if __name__ == '__main__':
     main()

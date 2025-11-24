@@ -34,6 +34,7 @@ from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, StrEnum
+from hashlib import sha256
 from logging import Logger
 from time import time, sleep
 from typing import Dict, List, Optional, Tuple, Union
@@ -52,8 +53,49 @@ from bitcoin.rpc import (
 )
 from socks import socksocket, SOCKS5
 
-# Current program version (Semantic Versioning)
-__version__ = '1.0.0'
+class Version:
+    """
+    Class responsible for managing program version information.
+    Implements Semantic Versioning with automatic build hash generation.
+    Build hash is calculated from source file SHA256 in development mode.
+    """
+    MAJOR = 1
+    MINOR = 0
+    PATCH = 1
+
+    @classmethod
+    def get_build_hash(cls) -> str | None:
+        """
+        Generates SHA256 hash of the source file for version tracking.
+        The hash is only produced when the source file is available.
+        Returns the first 8 characters of the hash, or None when the file
+        cannot be read (e.g., when running from a packaged executable).
+        """
+        sha256_hash = sha256()
+        try:
+            with open(__file__, 'rb') as f:
+                for chunk in iter(lambda: f.read(4096), b''):
+                    sha256_hash.update(chunk)
+            return sha256_hash.hexdigest()[:8]
+        except FileNotFoundError:
+            return None
+
+    @classmethod
+    def get_full_version(cls) -> str:
+        """
+        Returns complete version string in SemVer format.
+        Appends build hash when running from source code.
+        Format: MAJOR.MINOR.PATCH+build.HASH (e.g., 1.0.1+build.a1b2c3d4)
+        """
+        version = f'{cls.MAJOR}.{cls.MINOR}.{cls.PATCH}'
+
+        build = cls.get_build_hash()
+        if build:
+            version += f'+build.{build}'
+
+        return version
+
+__version__ = Version.get_full_version()
 
 class Color(StrEnum):
     """

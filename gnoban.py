@@ -475,12 +475,12 @@ def exec_setban(only_recents: bool):
             msg = f'Unable to send the setban request to {address}'
             mark(Status.FAILED, f'{msg} [{e}]', False)
 
-def getdata_node(node: Node) -> Optional[Node]:
+def getdata_node(node: Node) -> Node:
     """
     Attempt to establish a network connection to a given node and retrieve its version information.
 
     Sends a Bitcoin protocol 'version' message and reads the response to extract the node's
-    version, services, and subversion string. Uses SOCKS5 proxy settings depending on the
+    version, services, subver, and feefilter. Uses SOCKS5 proxy settings depending on the
     node's network type (I2P, Tor, CJDNS, or none).
 
     Parameters:

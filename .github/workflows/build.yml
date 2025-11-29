@@ -1,0 +1,183 @@
+name: Build
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  VERSION: ${{ github.ref_name }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  macos-cross:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: arm64-apple-darwin
+            os: macos-15
+          - name: x86_64-apple-darwin
+            os: macos-15-intel
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install nuitka
+          pip install -r requirements.txt
+
+      - name: Build
+        run: |
+          python -m nuitka \
+            --mode=onefile \
+            --python-flag=no_docstrings \
+            --product-name='GNOBAN' \
+            --product-version=${VERSION:1} \
+            --file-version=${VERSION:1} \
+            --assume-yes-for-downloads \
+            --enable-plugin=anti-bloat \
+            --output-dir=build \
+            --output-filename=gnoban \
+            gnoban.py
+
+      - name: Run test
+        run: |
+          file build/gnoban
+          ./build/gnoban --version
+
+      - name: Upload built executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnoban-${{ env.VERSION }}-${{ matrix.name }}
+          path: build/gnoban
+
+  linux-cross:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x86_64-linux-gnu
+            os: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Build
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            quay.io/pypa/manylinux2014_x86_64 \
+            bash -c "
+              # Configuring Python 3.11
+              ln -sf /opt/python/cp311-cp311/bin/python3 /usr/local/bin/python3
+              ln -sf /opt/python/cp311-cp311/bin/pip3 /usr/local/bin/pip3
+              cd /opt/_internal
+              tar xf static-libs-for-embedding-only.tar.xz
+
+              # Install Nuitka and its dependencies
+              cd /workspace
+              python3 -m pip install --upgrade pip
+              python3 -m pip install nuitka
+              python3 -m pip install -r requirements.txt
+
+              # Build
+              python3 -m nuitka \
+                --mode=onefile \
+                --python-flag=no_docstrings \
+                --product-name='GNOBAN' \
+                --product-version=${VERSION:1} \
+                --file-version=${VERSION:1} \
+                --onefile-tempdir-spec='{CACHE_DIR}/{PRODUCT}/{VERSION}' \
+                --assume-yes-for-downloads \
+                --enable-plugin=anti-bloat \
+                --output-dir=build \
+                --output-filename=gnoban \
+                gnoban.py
+            "
+
+      - name: Run test
+        run: |
+          file build/gnoban
+          ./build/gnoban --version
+
+      - name: Upload built executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnoban-${{ env.VERSION }}-${{ matrix.name }}
+          path: build/gnoban
+
+  windows-cross:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: win64
+            os: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install nuitka
+          pip install -r requirements.txt
+
+      - name: Patch
+        run: |
+          SITE_PACKAGES=$(python -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")
+          BITCOIN_RPC="$SITE_PACKAGES/bitcoin/rpc.py"
+          echo "Patching: $BITCOIN_RPC"
+          sed -i '38s/^/# /' "$BITCOIN_RPC"
+          sed -n '37,39p' "$BITCOIN_RPC"
+
+      - name: Build
+        run: |
+          python -m nuitka \
+            --mode=onefile \
+            --python-flag=no_docstrings \
+            --product-name='GNOBAN' \
+            --product-version=${VERSION:1} \
+            --file-version=${VERSION:1} \
+            --assume-yes-for-downloads \
+            --enable-plugin=anti-bloat \
+            --output-dir=build \
+            --output-filename=gnoban.exe \
+            --windows-console-mode=force \
+            gnoban.py
+
+      - name: Run test
+        run: |
+          file build/gnoban.exe
+          ./build/gnoban.exe --version
+
+      - name: Upload built executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnoban-${{ env.VERSION }}-${{ matrix.name }}
+          path: build/gnoban.exe

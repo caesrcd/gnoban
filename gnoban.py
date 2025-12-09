@@ -158,6 +158,7 @@ class Filter:
 
 criteria = Filter()
 
+# pylint: disable=too-many-instance-attributes
 @dataclass
 class Node:
     """
@@ -166,6 +167,7 @@ class Node:
     Attributes:
         - addr: IP address and port of the node.
         - network: Network type (e.g., ipv4, ipv6, onion).
+        - attempts: Total number of unsuccessful connection attempts.
         - conntime: Unix timestamp when the connection was established.
         - services: Service flags advertised by the node.
         - version: Protocol version used by the node.
@@ -174,6 +176,7 @@ class Node:
     """
     addr: str
     network: str
+    attempts: Optional[int] = 0
     services: Optional[int] = 0
     conntime: Optional[int] = 0
     version: Optional[int] = 0
@@ -825,9 +828,25 @@ def probe_nodes():
             done, futures = wait(futures, return_when=FIRST_COMPLETED)
             for future in done:
                 node = future.result()
-                if not node or node.is_empty():
-                    continue
                 address, _ = split_addressport(node.addr)
+                if node.is_empty():
+                    node.attempts += 1
+                    if node.attempts >= 3 and address in listbanned:
+                        try:
+                            BitcoinRPCProxy(**rpc_conf).call('setban', address, 'remove')
+                            listbanned.remove(address)
+                            stamp('Node inactive: Address released after three failed attempts')
+                        except JSONRPCError as e:
+                            msg = f'Unable to send the setban request to {address}'
+                            if e.args[0].get('code') == -30:
+                                stamp(f'{msg} (already unbanned)')
+                            else:
+                                mark(Status.FAILED, f"{msg} [{e.args[0].get('message')}]", False)
+                        except Exception as e: # pylint: disable=broad-exception-caught
+                            msg = f'Unable to send the setban request to {address}'
+                            mark(Status.FAILED, f'{msg} [{e}]', False)
+                    allnodes[address].attempts = node.attempts
+                    continue
                 allnodes[address].conntime = int(time())
                 allnodes[address].services = node.services
                 allnodes[address].version = node.version

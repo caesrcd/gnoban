@@ -3,6 +3,7 @@
 # Copyright (c) 2025 CaesarCoder <caesrcd@tutamail.com>
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or https://opensource.org/licenses/mit-license.php.
+# pylint: disable=too-many-lines
 """
 GNOBAN - A script to analyze and ban Bitcoin nodes based on custom criteria.
 
@@ -259,7 +260,10 @@ listbanned: List[str] = []
 logger: Logger = logging.getLogger(__name__)
 
 # Default initial options
-options: dict = {'enable_unban': False}
+options: dict = {
+    'enable_unban': False,
+    'max_attempts': 3
+}
 
 # Default settings for bitcoin.rpc.Proxy
 rpc_conf: dict = {
@@ -322,6 +326,12 @@ def build_parser() -> ArgumentParser:
     argrp_opt = parser.add_argument_group('Options')
     argrp_opt.add_argument('-conf', metavar="'str'", type=str,
         help='Specify the Bitcoin node configuration file.')
+    argrp_opt.add_argument('-max-attempts', metavar='num', type=int,
+        default=options['max_attempts'], help=(
+            'Max failed attempts before unbanning inactive nodes. '
+            f"(default: {options['max_attempts']})"
+        )
+    )
     argrp_opt.add_argument('-proxy', metavar='ip[:port]', type=str,
         help='Connect through SOCKS5 proxy.')
     argrp_opt.add_argument('-rpcurl', metavar="'str'", type=str,
@@ -685,6 +695,7 @@ def main():
     args = parser.parse_args()
 
     options['enable_unban'] = args.unban
+    options['max_attempts'] = args.max_attempts
 
     if args.rpcurl:
         rpc_conf['service_url'] = args.rpcurl
@@ -831,11 +842,12 @@ def probe_nodes():
                 address, _ = split_addressport(node.addr)
                 if node.is_empty():
                     node.attempts += 1
-                    if node.attempts >= 3 and address in listbanned:
+                    if node.attempts >= options['max_attempts'] and address in listbanned:
                         try:
                             BitcoinRPCProxy(**rpc_conf).call('setban', address, 'remove')
                             listbanned.remove(address)
-                            stamp('Node inactive: Address released after three failed attempts')
+                            stamp(f'Node inactive: The address was unbanned after {node.attempts} '
+                                'failed connection attempts')
                         except JSONRPCError as e:
                             msg = f'Unable to send the setban request to {address}'
                             if e.args[0].get('code') == -30:

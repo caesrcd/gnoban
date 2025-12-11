@@ -3,7 +3,7 @@
 # Copyright (c) 2025 CaesarCoder <caesrcd@tutamail.com>
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or https://opensource.org/licenses/mit-license.php.
-# pylint: disable=too-many-lines
+# pylint: disable=too-many-lines, too-many-branches
 """
 GNOBAN - A script to analyze and ban Bitcoin nodes based on custom criteria.
 
@@ -506,15 +506,25 @@ def exec_setban(only_recents: bool):
         return
 
     for address, node in allnodes.items():
-        if node.is_empty() or (only_recents and node.conntime < now - 300):
+        if node.attempts >= options['max_attempts'] and address in listbanned:
+            msg = (
+                'Node inactive: The address was unbanned after '
+                f'{node.attempts} failed connection attempts'
+            )
+        elif node.is_empty() or (only_recents and node.conntime < now - 300):
             continue
+        else:
+            msg = (
+                f'Node: net={node.network}, services={node.services}, '
+                f'version={str(node.version)}{node.subver}'
+            )
 
-        msg = (
-            f'Node: net={node.network}, services={node.services}, '
-            f'version={str(node.version)}{node.subver}'
-        )
         try:
-            if match_node(node) and address not in listbanned:
+            if msg.startswith('Node inactive'):
+                rpc_proxy.call('setban', address, 'remove')
+                listbanned.remove(address)
+                stamp(msg)
+            elif match_node(node) and address not in listbanned:
                 rpc_proxy.call('setban', address, 'add', options['bantime'])
                 listbanned.append(address)
                 stamp(msg.replace('Node:', 'Node banned:', 1))
@@ -586,6 +596,7 @@ def getdata_node(node: Node) -> Node:
             match header[4:16].rstrip(b'\x00'):
                 case b'version':
                     msg_version = MsgSerializable.from_bytes(header + payload)
+                    node.conntime = int(time())
                     node.version = int(msg_version.nVersion)
                     node.services = int(msg_version.nServices)
                     node.subver = msg_version.strSubVer.decode('utf-8', errors='ignore')
@@ -681,7 +692,6 @@ def load_listbanned():
 
     mark(Status.OK, f'Loaded banned addresses ({len(listbanned)} entries).')
 
-# pylint: disable=too-many-branches
 def main():
     """
     Entry point of the program that parses command-line arguments and initializes
@@ -818,23 +828,22 @@ def probe_nodes():
     threadctl.started_at = time()
     nodes_snapshot = list(allnodes.values())
 
-    if options['unban']:
-        has_nodes = bool(nodes_snapshot)
-    else:
-        has_nodes = any(node.is_empty() for node in nodes_snapshot)
-
-    if not has_nodes:
+    if not nodes_snapshot:
         stamp('No nodes found. Probe nodes thread paused for 1 hour')
         threadctl.finished_at = time()
         return
 
     with ThreadPoolExecutor(max_workers=16) as executor:
         futures = set()
-        nodes_to_process = (node for node in nodes_snapshot
-            if options['unban'] or node.is_empty())
+        nodes_to_process = iter(nodes_snapshot)
 
         def submit_batch():
             for node in nodes_to_process:
+                node = Node(
+                    addr=node.addr,
+                    network=node.network,
+                    attempts=node.attempts
+                )
                 futures.add(executor.submit(getdata_node, node))
                 if len(futures) >= 100:
                     break
@@ -844,31 +853,9 @@ def probe_nodes():
             done, futures = wait(futures, return_when=FIRST_COMPLETED)
             for future in done:
                 node = future.result()
+                node.attempts = node.attempts + 1 if node.is_empty() else 0
                 address, _ = split_addressport(node.addr)
-                if node.is_empty():
-                    node.attempts += 1
-                    if node.attempts >= options['max_attempts'] and address in listbanned:
-                        try:
-                            BitcoinRPCProxy(**rpc_conf).call('setban', address, 'remove')
-                            listbanned.remove(address)
-                            stamp(f'Node inactive: The address was unbanned after {node.attempts} '
-                                'failed connection attempts')
-                        except JSONRPCError as e:
-                            msg = f'Unable to send the setban request to {address}'
-                            if e.args[0].get('code') == -30:
-                                stamp(f'{msg} (already unbanned)')
-                            else:
-                                mark(Status.FAILED, f"{msg} [{e.args[0].get('message')}]", False)
-                        except Exception as e: # pylint: disable=broad-exception-caught
-                            msg = f'Unable to send the setban request to {address}'
-                            mark(Status.FAILED, f'{msg} [{e}]', False)
-                    allnodes[address].attempts = node.attempts
-                    continue
-                allnodes[address].conntime = int(time())
-                allnodes[address].services = node.services
-                allnodes[address].version = node.version
-                allnodes[address].subver = node.subver
-                allnodes[address].minfeefilter = node.minfeefilter
+                allnodes[address] = node
             submit_batch()
 
     stamp('Probe nodes thread paused for 15 minutes')

@@ -250,9 +250,6 @@ DEFAULT_I2P_SOCKS_PORT: int = 4447
 # Default port for Tor SOCKS5 proxy
 DEFAULT_TOR_SOCKS_PORT: int = 9050
 
-# Default ban duration in seconds (1 year)
-BANTIME: int = 365 * 24 * 60 * 60
-
 # List of banned addresses
 listbanned: List[str] = []
 
@@ -261,6 +258,7 @@ logger: Logger = logging.getLogger(__name__)
 
 # Default initial options
 options: dict = {
+    'bantime': 31536000,
     'max_attempts': 3,
     'unban': False
 }
@@ -324,6 +322,12 @@ def build_parser() -> ArgumentParser:
     )
     parser.add_argument('-h', '--help', action='help', help=SUPPRESS)
     argrp_opt = parser.add_argument_group('Options')
+    argrp_opt.add_argument('-bantime', metavar='num', type=int,
+        default=options['bantime'], help=(
+            'Time in seconds how long the node is banned. '
+            f"(default: {options['bantime']})"
+        )
+    )
     argrp_opt.add_argument('-conf', metavar="'str'", type=str,
         help='Specify the Bitcoin node configuration file.')
     argrp_opt.add_argument('-max-attempts', metavar='num', type=int,
@@ -490,7 +494,7 @@ def exec_setban(only_recents: bool):
 
     Iterates over all known nodes and bans those that match filtering rules and are not
     already banned. For each node to ban, invokes the 'setban' RPC command to
-    add a ban for a predefined duration (BANTIME).
+    add a ban for a duration specified by the -bantime option.
 
     Parameters:
         - only_recents: If True, only considers nodes connected within the last 5 minutes.
@@ -511,7 +515,7 @@ def exec_setban(only_recents: bool):
         )
         try:
             if match_node(node) and address not in listbanned:
-                rpc_proxy.call('setban', address, 'add', BANTIME)
+                rpc_proxy.call('setban', address, 'add', options['bantime'])
                 listbanned.append(address)
                 stamp(msg.replace('Node:', 'Node banned:', 1))
             elif options['unban'] and not match_node(node) and address in listbanned:
@@ -695,7 +699,7 @@ def main():
     args = parser.parse_args()
 
     options.update({f: getattr(args, f) for f in [
-        'unban', 'max_attempts'
+        'bantime', 'unban', 'max_attempts'
     ]})
 
     if args.rpcurl:

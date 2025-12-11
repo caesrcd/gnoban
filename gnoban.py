@@ -261,8 +261,8 @@ logger: Logger = logging.getLogger(__name__)
 
 # Default initial options
 options: dict = {
-    'enable_unban': False,
-    'max_attempts': 3
+    'max_attempts': 3,
+    'unban': False
 }
 
 # Default settings for bitcoin.rpc.Proxy
@@ -514,7 +514,7 @@ def exec_setban(only_recents: bool):
                 rpc_proxy.call('setban', address, 'add', BANTIME)
                 listbanned.append(address)
                 stamp(msg.replace('Node:', 'Node banned:', 1))
-            elif options['enable_unban'] and not match_node(node) and address in listbanned:
+            elif options['unban'] and not match_node(node) and address in listbanned:
                 rpc_proxy.call('setban', address, 'remove')
                 listbanned.remove(address)
                 stamp(msg.replace('Node:', 'Node unbanned:', 1))
@@ -656,7 +656,7 @@ def load_listbanned():
         address = node['address'].split('/')[0]
         listbanned.append(address)
 
-        if not options['enable_unban'] or allnodes.get(address):
+        if not options['unban'] or allnodes.get(address):
             continue
 
         if address.endswith('.onion'):
@@ -694,8 +694,9 @@ def main():
     parser = build_parser()
     args = parser.parse_args()
 
-    options['enable_unban'] = args.unban
-    options['max_attempts'] = args.max_attempts
+    options.update({f: getattr(args, f) for f in [
+        'unban', 'max_attempts'
+    ]})
 
     if args.rpcurl:
         rpc_conf['service_url'] = args.rpcurl
@@ -813,7 +814,7 @@ def probe_nodes():
     threadctl.started_at = time()
     nodes_snapshot = list(allnodes.values())
 
-    if options['enable_unban']:
+    if options['unban']:
         has_nodes = bool(nodes_snapshot)
     else:
         has_nodes = any(node.is_empty() for node in nodes_snapshot)
@@ -826,7 +827,7 @@ def probe_nodes():
     with ThreadPoolExecutor(max_workers=16) as executor:
         futures = set()
         nodes_to_process = (node for node in nodes_snapshot
-            if options['enable_unban'] or node.is_empty())
+            if options['unban'] or node.is_empty())
 
         def submit_batch():
             for node in nodes_to_process:

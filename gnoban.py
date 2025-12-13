@@ -31,7 +31,7 @@ from argparse import (
 )
 from base64 import b64decode
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import datetime
 from enum import Enum, StrEnum
 from hashlib import sha256
@@ -137,6 +137,34 @@ class Status(Enum):
         Used as the displayed message in the notification banner.
         """
         return self.value[1]
+
+@dataclass
+class DefaultOptions:
+    """
+    Configuration options for ban management.
+
+    Attributes:
+        bantime: Time in seconds how long the node is banned.
+        max_attempts: Max failed attempts before unbanning inactive nodes.
+        unban: Enable unbanning of nodes that do not meet the criteria.
+    """
+    bantime: int = 31536000
+    max_attempts: int = 3
+    unban: bool = False
+
+    def __setattr__(self, name, value):
+        """
+        Validates attribute constraints before assignment.
+        Calls parent's __setattr__ if validation passes, otherwise raises.
+        """
+        msg_pre = f'argument -{name}'
+        if name == 'bantime' and value < 1:
+            raise ValueError(f"{msg_pre}: value must be at least 1: '{value}'")
+        if name == 'max_attempts' and value < 1:
+            raise ValueError(f"{msg_pre}: value must be at least 1: '{value}'")
+        super().__setattr__(name, value)
+
+opts = DefaultOptions()
 
 @dataclass
 class Filter:
@@ -333,13 +361,6 @@ listbanned: List[str] = []
 # Default logger for recording log messages
 logger: Logger = logging.getLogger(__name__)
 
-# Default initial options
-options: dict = {
-    'bantime': 31536000,
-    'max_attempts': 3,
-    'unban': False
-}
-
 # Default settings for bitcoin.rpc.Proxy
 rpc_conf: dict = {
     'service_url': None,
@@ -390,7 +411,7 @@ def build_parser() -> ArgumentParser:
             Examples:
               %(prog)s -f '(ua "Knots" or srv 26) and not srv 29'
               %(prog)s -conf /mnt/btc/bitcoin.conf --unban -m 0.000009
-              %(prog)s -rpcurl http://user:pass@192.168.0.10:8332 -u 'Knots'
+              %(prog)s -rpcurl http://user:pass@192.168.0.10:8332 -s 27
 
             Note:
               When using simple filters (-m, -s, -u, -v) alongside -f, nodes matching *any* of the conditions will be selected.
@@ -400,17 +421,17 @@ def build_parser() -> ArgumentParser:
     parser.add_argument('-h', '--help', action='help', help=SUPPRESS)
     argrp_opt = parser.add_argument_group('Options')
     argrp_opt.add_argument('-bantime', metavar='num', type=int,
-        default=options['bantime'], help=(
+        default=opts.bantime, help=(
             'Time in seconds how long the node is banned. '
-            f"(default: {options['bantime']})"
+            f'(default: {opts.bantime})'
         )
     )
     argrp_opt.add_argument('-conf', metavar="'str'", type=str,
         help='Specify the Bitcoin node configuration file.')
     argrp_opt.add_argument('-max-attempts', metavar='num', type=int,
-        default=options['max_attempts'], help=(
+        default=opts.max_attempts, help=(
             'Max failed attempts before unbanning inactive nodes. '
-            f"(default: {options['max_attempts']})"
+            f'(default: {opts.max_attempts})'
         )
     )
     argrp_opt.add_argument('-proxy', metavar='ip[:port]', type=str,
@@ -583,7 +604,7 @@ def exec_setban(only_recents: bool):
         return
 
     for address, node in allnodes.items():
-        if node.attempts >= options['max_attempts'] and address in listbanned:
+        if node.attempts >= opts.max_attempts and address in listbanned:
             msg = (
                 'Node inactive: The address was unbanned after '
                 f'{node.attempts} failed connection attempts'
@@ -602,10 +623,10 @@ def exec_setban(only_recents: bool):
                 listbanned.remove(address)
                 stamp(msg)
             elif match_node(node) and address not in listbanned:
-                rpc_proxy.call('setban', address, 'add', options['bantime'])
+                rpc_proxy.call('setban', address, 'add', opts.bantime)
                 listbanned.append(address)
                 stamp(msg.replace('Node:', 'Node banned:', 1))
-            elif options['unban'] and not match_node(node) and address in listbanned:
+            elif opts.unban and not match_node(node) and address in listbanned:
                 rpc_proxy.call('setban', address, 'remove')
                 listbanned.remove(address)
                 stamp(msg.replace('Node:', 'Node unbanned:', 1))
@@ -727,7 +748,7 @@ def load_listbanned():
         address = node['address'].split('/')[0]
         listbanned.append(address)
 
-        if not options['unban'] or allnodes.get(address):
+        if not opts.unban or allnodes.get(address):
             continue
 
         if address.endswith('.onion'):
@@ -764,9 +785,12 @@ def main():
     parser = build_parser()
     args = parser.parse_args()
 
-    options.update({f: getattr(args, f) for f in [
-        'bantime', 'unban', 'max_attempts'
-    ]})
+    try:
+        for f in fields(DefaultOptions):
+            if hasattr(args, f.name):
+                setattr(opts, f.name, getattr(args, f.name))
+    except ValueError as e:
+        parser.error(e)
 
     if args.rpcurl:
         rpc_conf['service_url'] = args.rpcurl
@@ -785,8 +809,7 @@ def main():
                 re.compile(pattern)
             criteria.useragent = args.useragent
         except re.error as e:
-            print(f'Invalid regex for -u: {e}')
-            sys.exit(1)
+            parser.error(f'argument -u: invalid regex: {e}')
 
     if args.version:
         criteria.version = args.version
@@ -802,8 +825,7 @@ def main():
             eval(criteria.filter_expr, {}, {'node': node_test, 're': re})
         except Exception as e: # pylint: disable=broad-exception-caught
             msg = getattr(e, 'msg', str(e))
-            print(f'Invalid filter expression: {msg}')
-            sys.exit(1)
+            parser.error(f'argument -f: invalid filter expression: {msg}')
 
     if args.proxy:
         Proxy.set(args.proxy)

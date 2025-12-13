@@ -1,10 +1,14 @@
-# Global Node Search & Ban (GNOBAN)
+# GNOBAN
 
-A script to analyze and ban Bitcoin nodes based on custom criteria.
+[![Build](https://github.com/caesrcd/gnoban/actions/workflows/build.yml/badge.svg?event=push&label=Build)](https://github.com/caesrcd/gnoban/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/caesrcd/gnoban?label=Release)](https://github.com/caesrcd/gnoban/releases)
+![License](https://img.shields.io/github/license/caesrcd/gnoban?label=License)
+
+A program to analyze and ban Bitcoin nodes based on custom criteria.
 
 ## Description
 
-**GNOBAN** evaluates Bitcoin nodes connected to your node and bans those that match specified criteria — such as service flags, protocol versions, user agent strings, or minimum transaction fees.
+**GNOBAN** (Global Node Search & Ban) evaluates Bitcoin nodes connected to your node and bans those that match specified criteria — such as service flags, protocol versions, user agent strings, or minimum transaction fees.
 
 ## Features
 
@@ -15,6 +19,7 @@ A script to analyze and ban Bitcoin nodes based on custom criteria.
   - User agent substring match
   - Service flags
 - Unbans nodes that no longer meet the criteria
+- Unbans inactive addresses after multiple failed attempts
 - Supports SOCKS5 proxy connections
 
 ## Requirements
@@ -34,7 +39,7 @@ A script to analyze and ban Bitcoin nodes based on custom criteria.
 
 5. Verify that the checksum of the downloaded file is listed in the checksum file using one of the following commands:
 
-  - ***Linux:***
+  - ***Linux***
     ```bash
     sha256sum --ignore-missing --check SHA256SUMS
     gnoban-1.0.0-x86_64-linux-gnu.tar.gz: OK

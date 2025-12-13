@@ -5,9 +5,9 @@
 # file COPYING or https://opensource.org/licenses/mit-license.php.
 # pylint: disable=too-many-lines, too-many-branches
 """
-GNOBAN - A script to analyze and ban Bitcoin nodes based on custom criteria.
+GNOBAN - A program to analyze and ban Bitcoin nodes based on custom criteria.
 
-This script evaluates known nodes on your local full node and the Bitnodes Snapshot API.
+This program evaluates known nodes on your local full node and the Bitnodes Snapshot API.
 It supports filtering by minimum fee rate, service flags, user agent, and protocol version
 to ban remote nodes on your full node.
 
@@ -387,7 +387,7 @@ def build_parser() -> ArgumentParser:
     """
     Builds and returns the command-line argument parser.
 
-    Defines the supported options and filtering criteria for running the script.
+    Defines the supported options and filtering criteria for running the program.
     Includes help and usage examples.
     """
     parser = ArgumentParser(

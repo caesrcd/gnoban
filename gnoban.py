@@ -20,7 +20,6 @@ import ast
 import logging
 import os
 import re
-import socket
 import struct
 import sys
 import textwrap
@@ -37,6 +36,7 @@ from datetime import datetime
 from enum import Enum, StrEnum
 from hashlib import sha256
 from logging import Logger
+from socket import AF_INET, AF_INET6
 from time import time, sleep
 from typing import Dict, List, Optional, Tuple, Union
 from zlib import decompress
@@ -193,7 +193,6 @@ class Node:
 
 allnodes: Dict[str, Node] = {}
 
-@dataclass
 class Proxy:
     """
     Represents proxy configuration settings.
@@ -207,7 +206,85 @@ class Proxy:
     port: Optional[int] = None
     url: Optional[Dict[str, str]] = None
 
-proxy = Proxy()
+    @classmethod
+    def set(cls, proxy: str):
+        """
+        Set proxy configuration.
+
+        Parameters:
+            - proxy: Proxy address in format 'ip:port' or just 'ip'
+        """
+        cls.ip, cls.port = split_addressport(proxy, DEFAULT_TOR_SOCKS_PORT)
+        cls.url = {
+            'http': f'socks5h://{cls.ip}:{cls.port}',
+            'https': f'socks5h://{cls.ip}:{cls.port}'
+        }
+
+    @classmethod
+    def is_set(cls) -> bool:
+        """
+        Check if a proxy is currently configured.
+        Returns True if the proxy IP is set, False otherwise.
+        """
+        return cls.ip is not None
+
+class SocketFactory:
+    """
+    Socket factory for different network types.
+
+    Creates and configures sockets for various network types (ipv4, ipv6,
+    onion, i2p, cjdns) and provides reliable socket read operations.
+    """
+
+    @staticmethod
+    def create_socket(network: str) -> socksocket:
+        """
+        Create and configure a socket for the specified network type.
+
+        Parameters:
+            - network: Network type (ipv4, ipv6, onion, i2p, and cjdns)
+
+        Returns:
+            - socksocket: Configured socket with appropriate proxy settings
+                          (if needed) and default timeout applied
+        """
+        if network == 'i2p':
+            sock = socksocket(AF_INET)
+            sock.set_proxy(SOCKS5, '127.0.0.1', DEFAULT_I2P_SOCKS_PORT)
+        elif network == 'cjdns':
+            sock = socksocket(AF_INET6)
+        elif Proxy.is_set():
+            sock = socksocket(AF_INET)
+            sock.set_proxy(SOCKS5, Proxy.ip, Proxy.port)
+        elif network == 'onion':
+            sock = socksocket(AF_INET)
+            sock.set_proxy(SOCKS5, '127.0.0.1', DEFAULT_TOR_SOCKS_PORT)
+        else:
+            family = AF_INET6 if network == 'ipv6' else AF_INET
+            sock = socksocket(family)
+
+        sock.settimeout(10)
+        return sock
+
+    @staticmethod
+    def read_bytes(sock: socksocket, length: int) -> bytes:
+        """
+        Read exactly the specified number of bytes from the socket.
+
+        Parameters:
+            - sock: Socket to read data from
+            - length: Exact number of bytes to read
+
+        Returns:
+            bytes: Buffer containing exactly 'length' bytes received
+        """
+        recvbuf = b''
+        while len(recvbuf) < length:
+            chunk = sock.recv(length - len(recvbuf))
+            if not chunk:
+                raise EOFError()
+            recvbuf += chunk
+        return recvbuf
 
 @dataclass
 class ThreadState:
@@ -558,29 +635,7 @@ def getdata_node(node: Node) -> Node:
     Returns:
         - Node: The updated node object with version info if successful.
     """
-    if not proxy.ip and node.network in {'ipv6', 'cjdns'}:
-        sock = socksocket(socket.AF_INET6)
-    else:
-        sock = socksocket(socket.AF_INET)
-    sock.settimeout(10)
-
-    if node.network == 'i2p':
-        sock.set_proxy(SOCKS5, '127.0.0.1', DEFAULT_I2P_SOCKS_PORT)
-    elif node.network != 'cjdns' and proxy.ip:
-        sock.set_proxy(SOCKS5, proxy.ip, proxy.port)
-    elif node.network == 'onion':
-        sock.set_proxy(SOCKS5, '127.0.0.1', DEFAULT_TOR_SOCKS_PORT)
-    else:
-        sock.settimeout(5)
-
-    def read_bytes(sock: socksocket, length: int) -> bytes:
-        recvbuf = b''
-        while len(recvbuf) < length:
-            chunk = sock.recv(length - len(recvbuf))
-            if not chunk:
-                raise RuntimeError
-            recvbuf += chunk
-        return recvbuf
+    sock = SocketFactory.create_socket(node.network)
 
     try:
         address, port = split_addressport(node.addr)
@@ -591,8 +646,9 @@ def getdata_node(node: Node) -> Node:
         sock.send(msg_version.to_bytes())
 
         while True:
-            header = read_bytes(sock, 24)
-            payload = read_bytes(sock, int.from_bytes(header[16:20], byteorder='little'))
+            header = SocketFactory.read_bytes(sock, 24)
+            length = struct.unpack('<I', header[16:20])[0]
+            payload = SocketFactory.read_bytes(sock, length)
             match header[4:16].rstrip(b'\x00'):
                 case b'version':
                     msg_version = MsgSerializable.from_bytes(header + payload)
@@ -750,11 +806,7 @@ def main():
             sys.exit(1)
 
     if args.proxy:
-        proxy.ip, proxy.port = split_addressport(args.proxy, DEFAULT_TOR_SOCKS_PORT)
-        proxy.url = {
-            'http': f'socks5h://{proxy.ip}:{proxy.port}',
-            'https': f'socks5h://{proxy.ip}:{proxy.port}'
-        }
+        Proxy.set(args.proxy)
 
     if all(value is None for value in criteria.__dict__.values()):
         parser.print_help()
@@ -873,7 +925,7 @@ def snapshot_bitnodes():
     try:
         response = requests.get(
             'https://bitnodes.io/api/v1/snapshots/latest/',
-            proxies=proxy.url,
+            proxies=Proxy.url,
             timeout=30)
         response.raise_for_status()
         data = response.json()

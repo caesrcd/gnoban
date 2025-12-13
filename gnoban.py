@@ -38,7 +38,7 @@ from hashlib import sha256
 from logging import Logger
 from socket import AF_INET, AF_INET6
 from time import time, sleep
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Tuple, Union
 from zlib import decompress
 
 # Third-party module imports
@@ -151,11 +151,11 @@ class Filter:
         - useragent: List of user agent strings to match.
         - version: List of protocol versions to match.
     """
-    filter_expr: Optional[str] = None
-    minfeefilter: Optional[float] = None
-    service: Optional[List[int]] = None
-    useragent: Optional[List[str]] = None
-    version: Optional[List[int]] = None
+    filter_expr: str | None = None
+    minfeefilter: float | None = None
+    service: List[int] | None = None
+    useragent: List[str] | None = None
+    version: List[int] | None = None
 
 criteria = Filter()
 
@@ -177,12 +177,12 @@ class Node:
     """
     addr: str
     network: str
-    attempts: Optional[int] = 0
-    services: Optional[int] = 0
-    conntime: Optional[int] = 0
-    version: Optional[int] = 0
-    subver: Optional[str] = ''
-    minfeefilter: Optional[float] = 0
+    attempts: int = 0
+    services: int = 0
+    conntime: int = 0
+    version: int = 0
+    subver: str = ''
+    minfeefilter: float = 0
 
     def is_empty(self) -> bool:
         """
@@ -202,9 +202,9 @@ class Proxy:
         - port: Port number of the proxy server.
         - url: Dictionary containing protocol-to-proxy URL mappings.
     """
-    ip: Optional[str] = None
-    port: Optional[int] = None
-    url: Optional[Dict[str, str]] = None
+    ip: str | None = None
+    port: int | None = None
+    url: Dict[str, str] | None = None
 
     @classmethod
     def set(cls, proxy: str):
@@ -298,7 +298,7 @@ class ThreadState:
         - finished_at: Timestamp when the thread finished.
     """
     lock: threading.Lock = field(default_factory=threading.Lock)
-    thread: Optional[threading.Thread] = None
+    thread: threading.Thread | None = None
     started_at: float = 0
     finished_at: float = 0
 

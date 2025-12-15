@@ -38,7 +38,7 @@ from hashlib import sha256
 from logging import Logger
 from socket import AF_INET, AF_INET6
 from time import time, sleep
-from typing import Dict, List, Tuple, Union
+from typing import Dict, Set, Tuple, Union
 from zlib import decompress
 
 # Third-party module imports
@@ -181,9 +181,9 @@ class Filter:
     """
     filter_expr: str | None = None
     minfeefilter: float | None = None
-    service: List[int] | None = None
-    useragent: List[str] | None = None
-    version: List[int] | None = None
+    service: Set[int] | None = None
+    useragent: Set[str] | None = None
+    version: Set[int] | None = None
 
 criteria = Filter()
 
@@ -356,7 +356,7 @@ DEFAULT_I2P_SOCKS_PORT: int = 4447
 DEFAULT_TOR_SOCKS_PORT: int = 9050
 
 # List of banned addresses
-listbanned: List[str] = []
+listbanned: Set[str] = set()
 
 # Default logger for recording log messages
 logger: Logger = logging.getLogger(__name__)
@@ -605,6 +605,7 @@ def exec_setban(only_recents: bool):
 
     for address, node in allnodes.items():
         if node.attempts >= opts.max_attempts and address in listbanned:
+            action, op = 'remove', None
             msg = (
                 'Node inactive: The address was unbanned after '
                 f'{node.attempts} failed connection attempts'
@@ -616,20 +617,19 @@ def exec_setban(only_recents: bool):
                 f'Node: net={node.network}, services={node.services}, '
                 f'version={str(node.version)}{node.subver}'
             )
+            is_match = match_node(node)
+
+            if is_match and address not in listbanned:
+                action, op = ('add', opts.bantime), 'banned'
+            elif opts.unban and not is_match and address in listbanned:
+                action, op = 'remove', 'unbanned'
+            else:
+                continue
 
         try:
-            if msg.startswith('Node inactive'):
-                rpc_proxy.call('setban', address, 'remove')
-                listbanned.remove(address)
-                stamp(msg)
-            elif match_node(node) and address not in listbanned:
-                rpc_proxy.call('setban', address, 'add', opts.bantime)
-                listbanned.append(address)
-                stamp(msg.replace('Node:', 'Node banned:', 1))
-            elif opts.unban and not match_node(node) and address in listbanned:
-                rpc_proxy.call('setban', address, 'remove')
-                listbanned.remove(address)
-                stamp(msg.replace('Node:', 'Node unbanned:', 1))
+            rpc_proxy.call('setban', address, *([action] if isinstance(action, str) else action))
+            (listbanned.discard if action == 'remove' else listbanned.add)(address)
+            stamp(msg if op is None else msg.replace('Node:', f'Node {op}:', 1))
         except JSONRPCError as e:
             msg = f'Unable to send the setban request to {address}'
             if e.args[0].get('code') == -23:
@@ -746,7 +746,7 @@ def load_listbanned():
     listbanned.clear()
     for node in bannedaddresses:
         address = node['address'].split('/')[0]
-        listbanned.append(address)
+        listbanned.add(address)
 
         if not opts.unban or allnodes.get(address):
             continue
@@ -801,18 +801,18 @@ def main():
         criteria.minfeefilter = args.minfeefilter
 
     if args.service:
-        criteria.service = args.service
+        criteria.service = set(args.service)
 
     if args.useragent:
         try:
             for pattern in args.useragent:
                 re.compile(pattern)
-            criteria.useragent = args.useragent
+            criteria.useragent = set(args.useragent)
         except re.error as e:
             parser.error(f'argument -u: invalid regex: {e}')
 
     if args.version:
-        criteria.version = args.version
+        criteria.version = set(args.version)
 
     if args.filter:
         # Validate and compile user-defined filter expression
@@ -869,21 +869,17 @@ def match_node(node: Node) -> bool:
     Returns:
         - bool: True if the node matches any filter, False otherwise.
     """
-    if criteria.minfeefilter:
-        if node.minfeefilter > criteria.minfeefilter:
-            return True
+    if criteria.minfeefilter and node.minfeefilter > criteria.minfeefilter:
+        return True
 
-    if criteria.version:
-        if str(node.version) in map(str, criteria.version):
-            return True
+    if criteria.version and node.version in criteria.version:
+        return True
 
-    if criteria.useragent:
-        if any(re.search(p, node.subver) for p in criteria.useragent):
-            return True
+    if criteria.useragent and any(re.search(p, node.subver) for p in criteria.useragent):
+        return True
 
-    if criteria.service:
-        if any(node.services & (1 << s) for s in criteria.service):
-            return True
+    if criteria.service and any(node.services & (1 << s) for s in criteria.service):
+        return True
 
     if criteria.filter_expr:
         # pylint: disable=eval-used

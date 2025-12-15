@@ -1,0 +1,14 @@
+[MASTER]
+fail-under=9.5
+
+[DESIGN]
+# Project-specific thresholds
+max-attributes=8
+max-branches=13
+
+[MESSAGES CONTROL]
+# Disable structural warnings that cannot be addressed incrementally
+disable=too-many-lines
+
+# broad-exception-caught and eval-used: disable inline where reviewed
+# too-many-branches, too-many-instance-attributes: refactor or disable inline as needed

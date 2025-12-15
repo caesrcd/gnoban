@@ -1,0 +1,38 @@
+name: Tests
+on:
+  push:
+    branches: ['master']
+  pull_request:
+    branches: ['master']
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13', '3.14']
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 pylint
+        pip install -r requirements.txt
+
+    - name: Lint with flake8
+      run: |
+        flake8 gnoban.py --count --show-source --statistics
+
+    - name: Lint with pylint
+      run: |
+        pylint gnoban.py

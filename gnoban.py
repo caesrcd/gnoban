@@ -3,7 +3,6 @@
 # Copyright (c) 2025 CaesarCoder <caesrcd@tutamail.com>
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or https://opensource.org/licenses/mit-license.php.
-# pylint: disable=too-many-lines, too-many-branches
 """
 GNOBAN - A program to analyze and ban Bitcoin nodes based on custom criteria.
 
@@ -187,7 +186,6 @@ class Filter:
 
 criteria = Filter()
 
-# pylint: disable=too-many-instance-attributes
 @dataclass
 class Node:
     """

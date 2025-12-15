@@ -1,0 +1,5 @@
+[flake8]
+max-line-length = 127
+max-complexity = 10
+# Focus on real errors, not style nitpicks
+select = E9,W6,F

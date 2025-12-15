@@ -1,5 +1,6 @@
 # GNOBAN
 
+[![Tests](https://github.com/caesrcd/gnoban/actions/workflows/tests.yml/badge.svg?event=push&label=Tests)](https://github.com/caesrcd/gnoban/actions/workflows/tests.yml)
 [![Build](https://github.com/caesrcd/gnoban/actions/workflows/build.yml/badge.svg?event=push&label=Build)](https://github.com/caesrcd/gnoban/actions/workflows/build.yml)
 [![Release](https://img.shields.io/github/v/release/caesrcd/gnoban?label=Release)](https://github.com/caesrcd/gnoban/releases)
 ![License](https://img.shields.io/github/license/caesrcd/gnoban?label=License)

@@ -792,17 +792,6 @@ def main():
     except ValueError as e:
         parser.error(e)
 
-    if args.rpcurl:
-        rpc_conf['service_url'] = args.rpcurl
-    elif args.conf:
-        rpc_conf['btc_conf_file'] = args.conf
-
-    if args.minfeefilter:
-        criteria.minfeefilter = args.minfeefilter
-
-    if args.service:
-        criteria.service = set(args.service)
-
     if args.useragent:
         try:
             for pattern in args.useragent:
@@ -810,9 +799,6 @@ def main():
             criteria.useragent = set(args.useragent)
         except re.error as e:
             parser.error(f'argument -u: invalid regex: {e}')
-
-    if args.version:
-        criteria.version = set(args.version)
 
     if args.filter:
         # Validate and compile user-defined filter expression
@@ -826,6 +812,13 @@ def main():
         except Exception as e: # pylint: disable=broad-exception-caught
             msg = getattr(e, 'msg', str(e))
             parser.error(f'argument -f: invalid filter expression: {msg}')
+
+    criteria.minfeefilter = args.minfeefilter if args.minfeefilter else None
+    criteria.service = set(args.service) if args.service else None
+    criteria.version = set(args.version) if args.version else None
+
+    rpc_conf['service_url'] = args.rpcurl if args.rpcurl else None
+    rpc_conf['btc_conf_file'] = args.conf if args.conf else None
 
     if args.proxy:
         Proxy.set(args.proxy)

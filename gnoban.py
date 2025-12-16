@@ -167,22 +167,30 @@ opts = DefaultOptions()
 
 @dataclass
 class Filter:
-    """
-    Criteria used to filter nodes based on specific attributes.
+    """Criteria used to filter nodes based on specific attributes.
 
-    Each attribute is an optional list used to match against node data.
+    Each attribute has a default value. Empty/zero values mean the filter is not applied.
+
     Attributes:
-        - filter_expr: A filter expression (logical string condition).
-        - minfeefilter: Minimum fee rate (in BTC/kvB) to match.
-        - service: List of service flags to match.
-        - useragent: List of user agent strings to match.
-        - version: List of protocol versions to match.
+        filter_expr: A filter expression (logical string condition).
+        minfeefilter: Minimum fee rate (in BTC/kvB) to match.
+        service: Set of service flags to match.
+        useragent: Set of user agent strings to match.
+        version: Set of protocol versions to match.
     """
-    filter_expr: str | None = None
-    minfeefilter: float | None = None
-    service: Set[int] | None = None
-    useragent: Set[str] | None = None
-    version: Set[int] | None = None
+    filter_expr: str = ''
+    minfeefilter: float = 0
+    service: Set[int] = field(default_factory=set)
+    useragent: Set[str] = field(default_factory=set)
+    version: Set[int] = field(default_factory=set)
+
+    def is_empty(self) -> bool:
+        """Check if no filter criteria is set.
+
+        Returns:
+            True if all filter attributes are empty/falsy, False otherwise.
+        """
+        return not any(self.__dict__.values())
 
 criteria = Filter()
 
@@ -811,9 +819,9 @@ def main():
             msg = getattr(e, 'msg', str(e))
             parser.error(f'argument -f: invalid filter expression: {msg}')
 
-    criteria.minfeefilter = args.minfeefilter if args.minfeefilter else None
-    criteria.service = set(args.service) if args.service else None
-    criteria.version = set(args.version) if args.version else None
+    criteria.minfeefilter = args.minfeefilter or 0
+    criteria.service = set(args.service or [])
+    criteria.version = set(args.version or [])
 
     rpc_conf['service_url'] = args.rpcurl if args.rpcurl else None
     rpc_conf['btc_conf_file'] = args.conf if args.conf else None
@@ -821,7 +829,7 @@ def main():
     if args.proxy:
         Proxy.set(args.proxy)
 
-    if all(value is None for value in criteria.__dict__.values()):
+    if criteria.is_empty():
         parser.print_help()
     else:
         start()

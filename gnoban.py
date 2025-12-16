@@ -6,9 +6,9 @@
 """
 GNOBAN - A program to analyze and ban Bitcoin nodes based on custom criteria.
 
-This program evaluates known nodes on your local full node and the Bitnodes Snapshot API.
-It supports filtering by minimum fee rate, service flags, user agent, and protocol version
-to ban remote nodes on your full node.
+This program evaluates known nodes on your local full node and the Bitnodes
+Snapshot API. It supports filtering by minimum fee rate, service flags, user
+agent, and protocol version to ban remote nodes on your full node.
 
 Author: CaesarCoder <caesrcd@tutamail.com>
 License: MIT
@@ -54,8 +54,8 @@ from bitcoin.rpc import (
 from socks import SOCKS5, socksocket
 
 class Version:
-    """
-    Class responsible for managing program version information.
+    """Class responsible for managing program version information.
+
     Implements Semantic Versioning with automatic build hash generation.
     Build hash is calculated from source file SHA256 in development mode.
     """
@@ -65,9 +65,8 @@ class Version:
 
     @classmethod
     def get_build_hash(cls) -> str | None:
-        """
-        Generates SHA256 hash of the source file for version tracking.
-        The hash is only produced when the source file is available.
+        """Generates SHA256 hash of the source file for version tracking.
+
         Returns the first 8 characters of the hash, or None when the file
         cannot be read (e.g., when running from a packaged executable).
         """
@@ -82,8 +81,8 @@ class Version:
 
     @classmethod
     def get_full_version(cls) -> str:
-        """
-        Returns complete version string in SemVer format.
+        """Returns complete version string in SemVer format.
+
         Appends build hash when running from source code.
         Format: MAJOR.MINOR.PATCH+build.HASH (e.g., 1.0.1+build.a1b2c3d4)
         """
@@ -98,11 +97,11 @@ class Version:
 __version__ = Version.get_full_version()
 
 class Color(StrEnum):
-    """
-    ANSI color codes used for formatting terminal output.
+    """ANSI color codes used for formatting terminal output.
 
-    Each member represents a specific color or reset code,
-    typically used to enhance the visibility of status messages.
+    Each member represents a specific color or reset code following
+    the ANSI escape sequence format (\033[<code>m).
+    Typically used to enhance the visibility of status messages.
     """
     RST   = '\033[0m'   # Reset
     CYN   = '\033[36m'  # Cyan
@@ -111,8 +110,7 @@ class Color(StrEnum):
     WHT_L = '\033[97m'  # White Light
 
 class Status(Enum):
-    """
-    Enumeration representing possible statuses for banner messages.
+    """Enumeration representing possible statuses for banner messages.
 
     Each status consists of a color code and a human-readable label.
     Intended for visual output formatting in terminal environments.
@@ -123,39 +121,32 @@ class Status(Enum):
 
     @property
     def color(self) -> str:
-        """
-        Returns the ANSI color code associated with the status.
-        Useful for formatting colored terminal output.
-        """
+        """Returns the ANSI color code associated with the status."""
         return self.value[0]
 
     @property
     def label(self) -> str:
-        """
-        Returns the text label associated with the status.
-        Used as the displayed message in the notification banner.
-        """
+        """Returns the text label associated with the status."""
         return self.value[1]
 
 @dataclass
 class DefaultOptions:
-    """
-    Configuration options for ban management.
+    """Configuration options for ban management.
 
     Attributes:
         bantime: Time in seconds how long the node is banned.
         max_attempts: Max failed attempts before unbanning inactive nodes.
         unban: Enable unbanning of nodes that do not meet the criteria.
+
+    Raises:
+        ValueError: If validation fails for bantime or max_attempts.
     """
     bantime: int = 31536000
     max_attempts: int = 3
     unban: bool = False
 
     def __setattr__(self, name: str, value: Any) -> None:
-        """
-        Validates attribute constraints before assignment.
-        Calls parent's __setattr__ if validation passes, otherwise raises.
-        """
+        """Validates attribute constraints before assignment."""
         msg_pre = f'argument -{name}'
         if name == 'bantime' and value < 1:
             raise ValueError(f"{msg_pre}: value must be at least 1: '{value}'")
@@ -196,18 +187,17 @@ criteria = Filter()
 
 @dataclass
 class Node:
-    """
-    Represents a remote node with network connection metadata.
+    """Represents a remote node with network connection metadata.
 
     Attributes:
-        - addr: IP address and port of the node.
-        - network: Network type (e.g., ipv4, ipv6, onion).
-        - attempts: Total number of unsuccessful connection attempts.
-        - conntime: Unix timestamp when the connection was established.
-        - services: Service flags advertised by the node.
-        - version: Protocol version used by the node.
-        - subver: User agent string of the node.
-        - minfeefilter: Minimum fee rate of the node.
+        addr: IP address and port of the node.
+        network: Network type (e.g., ipv4, ipv6, onion).
+        attempts: Total number of unsuccessful connection attempts.
+        conntime: Unix timestamp when the connection was established.
+        services: Service flags advertised by the node.
+        version: Protocol version used by the node.
+        subver: User agent string of the node.
+        minfeefilter: Minimum fee rate of the node (in BTC/kvB).
     """
     addr: str
     network: str
@@ -219,22 +209,23 @@ class Node:
     minfeefilter: float = 0
 
     def is_empty(self) -> bool:
+        """Returns whether the node lacks ALL relevant metadata.
+
+        Returns:
+            True only if conntime, services, version, and subver are all empty/zero.
         """
-        Returns whether the node lacks any relevant metadata.
-        Useful for detecting placeholder or uninitialized node entries.
-        """
+        # Note: addr, network, attempts, and minfeefilter are not checked
         return not (self.conntime or self.services or self.version or self.subver)
 
 allnodes: Dict[str, Node] = {}
 
 class Proxy:
-    """
-    Represents proxy configuration settings.
+    """Global proxy configuration settings (static class).
 
-    Attributes:
-        - ip: IP address of the proxy server.
-        - port: Port number of the proxy server.
-        - url: Dictionary containing protocol-to-proxy URL mappings.
+    Class Attributes:
+        ip: IP address of the proxy server.
+        port: Port number of the proxy server.
+        url: Dictionary containing protocol-to-proxy URL mappings.
     """
     ip: str | None = None
     port: int | None = None
@@ -242,11 +233,13 @@ class Proxy:
 
     @classmethod
     def set(cls, proxy: str) -> None:
-        """
-        Set proxy configuration.
+        """Set global proxy configuration.
 
-        Parameters:
-            - proxy: Proxy address in format 'ip:port' or just 'ip'
+        Parses proxy address and creates socks5h:// URLs for HTTP/HTTPS.
+        If port is omitted, uses DEFAULT_TOR_SOCKS_PORT as fallback.
+
+        Args:
+            proxy: Proxy address in format 'ip:port' or just 'ip'
         """
         cls.ip, cls.port = split_addressport(proxy, DEFAULT_TOR_SOCKS_PORT)
         cls.url = {
@@ -256,31 +249,31 @@ class Proxy:
 
     @classmethod
     def is_set(cls) -> bool:
-        """
-        Check if a proxy is currently configured.
-        Returns True if the proxy IP is set, False otherwise.
+        """Check if a proxy is currently configured.
+
+        Returns:
+            True if the proxy IP is set, False otherwise.
         """
         return cls.ip is not None
 
 class SocketFactory:
-    """
-    Socket factory for different network types.
+    """Socket factory for different network types.
 
     Creates and configures sockets for various network types (ipv4, ipv6,
-    onion, i2p, cjdns) and provides reliable socket read operations.
+    onion, i2p, cjdns) with appropriate proxy settings and 10s timeout.
+    Provides reliable socket read operations with EOF detection.
     """
 
     @staticmethod
     def create_socket(network: str) -> socksocket:
-        """
-        Create and configure a socket for the specified network type.
+        """Create and configure a socket for the specified network type.
 
-        Parameters:
-            - network: Network type (ipv4, ipv6, onion, i2p, and cjdns)
+        Args:
+            network: Network type (ipv4, ipv6, onion, i2p, and cjdns)
 
         Returns:
-            - socksocket: Configured socket with appropriate proxy settings
-                          (if needed) and default timeout applied
+            Configured socket with appropriate proxy settings (if needed)
+                and default timeout applied
         """
         if network == 'i2p':
             sock = socksocket(AF_INET)
@@ -302,15 +295,17 @@ class SocketFactory:
 
     @staticmethod
     def read_bytes(sock: socksocket, length: int) -> bytes:
-        """
-        Read exactly the specified number of bytes from the socket.
+        """Read exactly the specified number of bytes from the socket.
 
-        Parameters:
-            - sock: Socket to read data from
-            - length: Exact number of bytes to read
+        Args:
+            sock: Socket to read data from
+            length: Exact number of bytes to read
 
         Returns:
-            bytes: Buffer containing exactly 'length' bytes received
+            Buffer containing exactly 'length' bytes received
+
+        Raises:
+            EOFError: If socket closes before all bytes are received.
         """
         recvbuf = b''
         while len(recvbuf) < length:
@@ -322,14 +317,13 @@ class SocketFactory:
 
 @dataclass
 class ThreadState:
-    """
-    Manages the lifecycle state of a background thread.
+    """Manages the lifecycle state of a background thread.
 
     Attributes:
-        - lock: Threading lock used for synchronization.
-        - thread: Reference to the running thread instance.
-        - started_at: Timestamp when the thread started.
-        - finished_at: Timestamp when the thread finished.
+        lock: Threading lock used for synchronization.
+        thread: Reference to the running thread instance.
+        started_at: Unix timestamp (seconds) when the thread started.
+        finished_at: Unix timestamp (seconds) when the thread finished.
     """
     lock: threading.Lock = field(default_factory=threading.Lock)
     thread: threading.Thread | None = None
@@ -337,14 +331,15 @@ class ThreadState:
     finished_at: float = 0
 
     def should_wait(self) -> bool:
-        """
-        Checks if the thread should wait before starting again.
-        Returns True if still in waiting period, False otherwise.
+        """Checks if the thread is still in its waiting period.
 
         Waiting periods:
-            - No wait on first run (finished_at == 0)
-            - 900 seconds (15 min) after successful run with nodes
-            - 3600 seconds (1 hour) after run with no nodes (duration < 10s)
+          - No wait on first run (finished_at == 0)
+          - 900 seconds (15 min) after successful run with nodes (duration > 10s)
+          - 3600 seconds (1 hour) after run with no nodes (duration <= 10s)
+
+        Returns:
+            True if still waiting, False if ready to run.
         """
         if not self.finished_at:
             return False
@@ -355,28 +350,24 @@ class ThreadState:
 
 threadctl = ThreadState()
 
-# Default port for I2P SOCKS5 proxy
-DEFAULT_I2P_SOCKS_PORT: int = 4447
+DEFAULT_I2P_SOCKS_PORT: int = 4447  # Standard I2P SOCKS5 port
+DEFAULT_TOR_SOCKS_PORT: int = 9050  # Standard Tor SOCKS5 port
 
-# Default port for Tor SOCKS5 proxy
-DEFAULT_TOR_SOCKS_PORT: int = 9050
-
-# List of banned addresses
+# Set of banned node addresses (format: "ip:port")
 listbanned: Set[str] = set()
 
-# Default logger for recording log messages
+# Module-level logger
 logger: Logger = logging.getLogger(__name__)
 
-# Default settings for bitcoin.rpc.Proxy
+# Configuration for Bitcoin RPC connection via bitcoin.rpc.Proxy
 rpc_conf: dict[str, Any] = {
-    'service_url': None,
-    'btc_conf_file': None,
-    'timeout': 30
+    'service_url': None,    # RPC endpoint URL
+    'btc_conf_file': None,  # Path to bitcoin.conf
+    'timeout': 30           # Request timeout (seconds)
 }
 
 def banner() -> None:
-    """
-    Prints a stylized ASCII banner to standard output.
+    """Prints a stylized ASCII banner to standard output.
 
     The banner is stored as a base64-encoded, zlib-compressed byte string.
     Upon decoding and decompression, the resulting ASCII art is printed.
@@ -390,11 +381,17 @@ def banner() -> None:
     sys.stdout.write(decompress(b64decode(banner_encoded)).decode())
 
 def build_parser() -> ArgumentParser:
-    """
-    Builds and returns the command-line argument parser.
+    """Builds and returns the command-line argument parser.
 
-    Defines the supported options and filtering criteria for running the program.
-    Includes help and usage examples.
+    Creates an ArgumentParser with two main argument groups:
+      - Options: Program configuration (bantime, proxy, RPC connection, etc.)
+      - Criteria: Node filtering rules (expressions, minfeefilter, services, etc.)
+
+    Supports complex filter expressions with logical operators (and, or, not)
+    and comparison operators for protocol versions.
+
+    Returns:
+        Configured parser ready to parse command-line arguments.
     """
     parser = ArgumentParser(
         add_help=False,
@@ -469,8 +466,7 @@ def build_parser() -> ArgumentParser:
     return parser
 
 def check_bitcoind() -> None:
-    """
-    Verifies connectivity with the bitcoin node using RPC.
+    """Verifies connectivity with the bitcoin node using RPC.
 
     Executes the 'uptime' command through the RPC interface to ensure the node is reachable.
     Displays a status message based on the result, and exits if the check fails due to
@@ -483,45 +479,43 @@ def check_bitcoind() -> None:
     except JSONRPCError as e:
         mark(Status.FAILED, f"{e.args[0].get('message')}\r\n")
         sys.exit(1)
-    except Exception as e: # pylint: disable=broad-exception-caught
+    except Exception as e:  # pylint: disable=broad-exception-caught
         mark(Status.FAILED, f'{e}\r\n')
         sys.exit(1)
 
     mark(Status.OK, f"Checked access to bitcoin node via RPC.{' ' * 5}")
 
 def compile_node_filter(expr: str) -> str:
-    """
-    Translates a simplified filter expression string into a valid Python expression.
+    """Translates a simplified filter expression string into a valid Python expression.
 
     This function allows users to write human-friendly filter conditions using keywords
-    like 'mff', 'srv', 'ua', and 'ver', along with basic boolean operators. The resulting
-    expression is compatible with eval() and can be used to match node attributes.
+    like 'mff', 'srv', 'ua', and 'ver', along with basic boolean operators.
 
     Supported transformations:
-      - &&, ||, !           → and, or, not
-      - mff N               → node.minfeefilter > N
-      - srv N               → (node.services & (1 << N))
-      - ua 'pattern'        → re.search(r'pattern', node.subver)
-      - ver N               → node.version == N
-      - ver >= N            → node.version >= N
+      - &&, ||, !       → and, or, not
+      - mff N           → node.minfeefilter > N
+      - srv N           → (node.services & (1 << N))
+      - ua 'pattern'    → re.search(r'pattern', node.subver)
+      - ver N           → node.version == N
+      - ver >= N        → node.version >= N
 
-    Parameters:
-        expr (str): A user-provided filter string.
+    Args:
+        expr: A user-provided filter string.
 
     Returns:
-        str: A valid Python expression string suitable for eval().
+        A valid Python expression string suitable for eval().
 
     Note:
         The returned string is intended to be used with eval().
         Always ensure that 'node' and 're' are properly scoped and trusted.
     """
 
-    # Logical operators
+    # Convert logical operators to Python syntax
     expr = re.sub(r'\s*&&\s*', ' and ', expr)
     expr = re.sub(r'\s*\|\|\s*', ' or ', expr)
-    expr = re.sub(r'(?<!\w)!(?!=)', 'not ', expr) # convert ! to not, avoid !=
+    expr = re.sub(r'(?<!\w)!(?!=)', 'not ', expr)  # ! → not (but preserve != operator)
 
-    # Match expressions
+    # Convert filter primitives to Python expressions
     expr = re.sub(r'\bmff\s+([\d.]+)', r'node.minfeefilter > \1', expr)
     expr = re.sub(r'\bsrv\s+(\d+)', r'(node.services & (1 << \1))', expr)
     expr = re.sub(r'\bua\s+[\'"](.+?)[\'"]', r"re.search(r'\1', node.subver)", expr)
@@ -531,8 +525,7 @@ def compile_node_filter(expr: str) -> str:
     return expr
 
 def exec_getpeerinfo() -> None:
-    """
-    Retrieves and processes the current peer information from bitcoind.
+    """Retrieves and processes the current peer information from bitcoind.
 
     Fetches peer data via the 'getpeerinfo' RPC command, parses the JSON output,
     and updates the internal node list accordingly. Filters out nodes based on
@@ -547,7 +540,7 @@ def exec_getpeerinfo() -> None:
             'Could not load peers info. '
             f"[{e.args[0].get('message')}]", False)
         return
-    except Exception as e: # pylint: disable=broad-exception-caught
+    except Exception as e:  # pylint: disable=broad-exception-caught
         mark(Status.FAILED, f'Could not load peers info. [{e}]', False)
         return
 
@@ -585,7 +578,7 @@ def exec_getpeerinfo() -> None:
                         f'Could not disconnect address {node.addr} '
                         f'({str(node.version)}{node.subver}) '
                         f"[{e.args[0].get('message')}]", False)
-            except Exception as e: # pylint: disable=broad-exception-caught
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 mark(Status.FAILED,
                     f'Could not disconnect address {node.addr} '
                     f'({str(node.version)}{node.subver}) '
@@ -593,20 +586,20 @@ def exec_getpeerinfo() -> None:
             continue
 
 def exec_setban(only_recents: bool) -> None:
-    """
-    Bans nodes from the Bitcoin network based on connection time and filtering criteria.
+    """Bans or unbans nodes based on filtering criteria and connection status.
 
-    Iterates over all known nodes and bans those that match filtering rules and are not
-    already banned. For each node to ban, invokes the 'setban' RPC command to
-    add a ban for a duration specified by the -bantime option.
+    Iterates over known nodes and:
+      - Bans nodes matching filter criteria (not already banned)
+      - Unbans nodes not matching criteria (if --unban is enabled)
+      - Unbans inactive nodes after max failed connection attempts
 
-    Parameters:
-        - only_recents: If True, only considers nodes connected within the last 5 minutes.
+    Args:
+        only_recents: If True, only processes nodes connected within the last 5 minutes.
     """
     now = time()
     try:
         rpc_proxy = BitcoinRPCProxy(**rpc_conf)
-    except Exception: # pylint: disable=broad-exception-caught
+    except Exception:  # pylint: disable=broad-exception-caught
         return
 
     for address, node in allnodes.items():
@@ -644,23 +637,22 @@ def exec_setban(only_recents: bool) -> None:
                 stamp(f'{msg} (already unbanned)')
             else:
                 mark(Status.FAILED, f"{msg} [{e.args[0].get('message')}]", False)
-        except Exception as e: # pylint: disable=broad-exception-caught
+        except Exception as e:  # pylint: disable=broad-exception-caught
             msg = f'Unable to send the setban request to {address}'
             mark(Status.FAILED, f'{msg} [{e}]', False)
 
 def getdata_node(node: Node) -> Node:
-    """
-    Attempt to establish a network connection to a given node and retrieve its version information.
+    """Attempts to connect to a node and retrieve its version information.
 
-    Sends a Bitcoin protocol 'version' message and reads the response to extract the node's
-    version, services, subver, and feefilter. Uses SOCKS5 proxy settings depending on the
-    node's network type (I2P, Tor, CJDNS, or none).
+    Sends a Bitcoin protocol 'version' message and waits for the response
+    to extract version, services, subver, and feefilter data.
 
-    Parameters:
-        - node: The node object containing address, port, and network info.
+    Args:
+        node: Node object containing address and network info.
 
     Returns:
-        - Node: The updated node object with version info if successful.
+        Updated node with version info on success, or unchanged node on failure.
+        Connection errors are silently ignored.
     """
     sock = SocketFactory.create_socket(node.network)
 
@@ -687,19 +679,19 @@ def getdata_node(node: Node) -> Node:
                 case b'feefilter':
                     node.minfeefilter = float(struct.unpack('<Q', payload)[0]) / 100000000
                     break
-    except Exception: # pylint: disable=broad-exception-caught
+    except Exception:  # pylint: disable=broad-exception-caught
+        # Silently fail - node returned with empty/unchanged metadata
         pass
 
     sock.close()
     return node
 
 def load_allnodes() -> None:
-    """
-    Load all known Bitcoin network node addresses into the global allnodes dictionary.
+    """Loads all known Bitcoin network node addresses into the global registry.
 
-    The function queries the Bitcoin daemon for the total number of known nodes using
-    'getaddrmaninfo', then fetches detailed node address information with 'getnodeaddresses'.
-    It populates the global allnodes dict with Node instances keyed by their IP address.
+    Fetches node addresses via 'getnodeaddresses' RPC (count=0 for all nodes)
+    and populates allnodes dictionary with Node instances keyed by IP address.
+    Skips duplicate addresses and formats IPv6/CJDNS with brackets per RFC 3986.
     """
     mark(Status.EMPTY, 'Loading known addresses...')
 
@@ -710,7 +702,7 @@ def load_allnodes() -> None:
     except JSONRPCError as e:
         mark(Status.FAILED, f"{e.args[0].get('message')}\r\n")
         sys.exit(1)
-    except Exception as e: # pylint: disable=broad-exception-caught
+    except Exception as e:  # pylint: disable=broad-exception-caught
         mark(Status.FAILED, f'{e}\r\n')
         sys.exit(1)
 
@@ -731,12 +723,11 @@ def load_allnodes() -> None:
     mark(Status.OK, f'Loaded known addresses ({address_count} entries).')
 
 def load_listbanned() -> None:
-    """
-    Load the list of banned node addresses into the global listbanned list.
+    """Loads banned node addresses into the global listbanned set.
 
-    The function calls the Bitcoin daemon's 'listbanned' RPC command to retrieve
-    currently banned addresses, clears the existing listbanned, and updates it
-    with the IP addresses extracted from the banned entries.
+    Fetches banned addresses via 'listbanned' RPC and updates the global set.
+    If --unban is enabled, creates placeholder Node entries for banned addresses
+    not in the allnodes registry (needed for later unban evaluation).
     """
     mark(Status.EMPTY, 'Loading banned addresses...')
 
@@ -745,7 +736,7 @@ def load_listbanned() -> None:
     except JSONRPCError as e:
         mark(Status.FAILED, f"{e.args[0].get('message')}\r\n")
         sys.exit(1)
-    except Exception as e: # pylint: disable=broad-exception-caught
+    except Exception as e:  # pylint: disable=broad-exception-caught
         mark(Status.FAILED, f'{e}\r\n')
         sys.exit(1)
 
@@ -776,21 +767,16 @@ def load_listbanned() -> None:
     mark(Status.OK, f'Loaded banned addresses ({len(listbanned)} entries).')
 
 def main() -> None:
-    """
-    Entry point of the program that parses command-line arguments and initializes
-    program state accordingly.
+    """Entry point that parses CLI arguments, validates filters, and starts processing.
 
-    - Parses CLI arguments using the argument parser built by `build_parser()`.
-    - Sets filtering criteria based on user input such as minfeefilter, service,
-      useragent regex patterns, and version.
-    - Validates regex patterns provided for useragent and exits if invalid.
-    - Configures proxy settings if provided.
-    - If no criteria are specified, prints help and exits.
-    - Otherwise, calls the `start()` function to begin processing.
+    Parses command-line arguments, validates filtering criteria (regex patterns,
+    filter expressions), configures proxy settings, and calls start() if criteria
+    are valid. Prints help and exits if no criteria specified or validation fails.
     """
     parser = build_parser()
     args = parser.parse_args()
 
+    # Copy parsed arguments to DefaultOptions instance (validates constraints)
     try:
         for f in fields(DefaultOptions):
             if hasattr(args, f.name):
@@ -798,6 +784,7 @@ def main() -> None:
     except ValueError as e:
         parser.error(e)
 
+    # Validate user agent regex patterns
     if args.useragent:
         try:
             for pattern in args.useragent:
@@ -806,8 +793,8 @@ def main() -> None:
         except re.error as e:
             parser.error(f'argument -u: invalid regex: {e}')
 
+    # Validate filter expression via AST parsing and test evaluation
     if args.filter:
-        # Validate and compile user-defined filter expression
         parsed_expr = compile_node_filter(args.filter)
         try:
             ast.parse(parsed_expr, mode='eval')
@@ -815,33 +802,40 @@ def main() -> None:
             node_test = Node(addr='', network='')
             # pylint: disable=eval-used
             eval(criteria.filter_expr, {}, {'node': node_test, 're': re})
-        except Exception as e: # pylint: disable=broad-exception-caught
+        except Exception as e:  # pylint: disable=broad-exception-caught
             msg = getattr(e, 'msg', str(e))
             parser.error(f'argument -f: invalid filter expression: {msg}')
 
+    # Set filtering criteria
     criteria.minfeefilter = args.minfeefilter or 0
     criteria.service = set(args.service or [])
     criteria.version = set(args.version or [])
 
+    # Configure RPC connection
     rpc_conf['service_url'] = args.rpcurl
     rpc_conf['btc_conf_file'] = args.conf
 
+    # Configure proxy if provided
     if args.proxy:
         Proxy.set(args.proxy)
 
+    # Start processing if criteria are specified
     if criteria.is_empty():
         parser.print_help()
     else:
         start()
 
 def mark(status: Color | Status, text: str, answer: bool=True) -> None:
-    """
-    Display a colored status label and message on the console.
+    """Displays a colored status label and message, then logs it.
 
-    Parameters:
-        - status: Status or Color instance defining label and color.
-        - text: Message to print.
-        - answer: If True, overwrites the current line; else prints new line.
+    Prints formatted message with ANSI color codes to stdout and logs to
+    the module logger (ERROR level for FAILED status, INFO for others).
+
+    Args:
+        status: Status enum (with label and color) or Color enum (color only).
+        text: Message text to display and log.
+        answer: If True, overwrites current line for progress updates;
+                if False, prints on new line.
     """
     color = status.color if isinstance(status, Status) else Status.EMPTY.color
     label = status.label if isinstance(status, Status) else Status.EMPTY.label
@@ -859,14 +853,16 @@ def mark(status: Color | Status, text: str, answer: bool=True) -> None:
         logger.info(text)
 
 def match_node(node: Node) -> bool:
-    """
-    Check if a node matches the defined criteria.
+    """Checks if a node matches any of the defined filter criteria.
 
-    Parameters:
-        - node: The network node to evaluate.
+    Uses OR logic: returns True if node matches ANY criterion.
+    Empty criteria fields are ignored.
+
+    Args:
+        node: Network node to evaluate.
 
     Returns:
-        - bool: True if the node matches any filter, False otherwise.
+        True if node matches at least one criterion, False otherwise.
     """
     if criteria.minfeefilter and node.minfeefilter > criteria.minfeefilter:
         return True
@@ -888,11 +884,13 @@ def match_node(node: Node) -> bool:
     return False
 
 def probe_nodes() -> None:
-    """
-    Probes nodes without a connection timestamp to retrieve their metadata.
+    """Probes nodes without metadata to retrieve version information.
 
-    Uses a thread pool to concurrently connect to nodes that have not yet been contacted.
-    Updates each node's connection time, version, services, and user agent upon success.
+    Uses thread pool (16 workers) to concurrently connect to nodes.
+    Processes in batches of 100 to control memory usage.
+
+    Updates node metadata on success, increments attempts on failure.
+    Thread-safe updates to global allnodes registry.
     """
     threadctl.started_at = time()
     nodes_snapshot = list(allnodes.values())
@@ -931,11 +929,11 @@ def probe_nodes() -> None:
     threadctl.finished_at = time()
 
 def snapshot_bitnodes() -> None:
-    """
-    Downloads the latest node snapshot from Bitnodes API and updates the `allnodes` map.
+    """Downloads the latest node snapshot from Bitnodes API.
 
-    Updates the `allnodes` map with addresses of missing nodes so that the information
-    can be accurately consulted later.
+    Fetches active node addresses from Bitnodes public API and adds any
+    missing nodes to the global allnodes registry. Skips nodes already present.
+    Uses proxy settings if configured.
     """
     mark(Status.EMPTY, 'Downloading latest snapshot from Bitnodes...')
 
@@ -973,15 +971,19 @@ def snapshot_bitnodes() -> None:
     mark(Status.OK, f'Downloaded latest snapshot from Bitnodes ({address_count} entries).')
 
 def split_addressport(addressport: str, dport: int=8333) -> Tuple[str, int]:
-    """
-    Splits an address string into (address, port), handling IPv4, IPv6, and default port cases.
+    """Splits an address string into (address, port).
 
-    Parameters:
-        - addressport: Address string, optionally with port (e.g., '1.2.3.4:8333', '[::1]:8333').
-        - dport: Default port to use if none is specified.
+    Handles IPv4, IPv6 (with brackets), and addresses without explicit port.
+
+    Args:
+        addressport: Address string, optionally with port (e.g., '1.2.3.4:8333', '[::1]:8333').
+        dport: Default port if none specified (default: 8333).
 
     Returns:
-        - Tuple: A tuple of (address, port).
+        Tuple of (address, port).
+
+    Raises:
+        ValueError: If IPv6 address format is malformed.
     """
     if addressport.startswith('['):
         match = re.match(r'^\[([^\]]+)\](?::(\d+))?$', addressport)
@@ -998,11 +1000,14 @@ def split_addressport(addressport: str, dport: int=8333) -> Tuple[str, int]:
     return address, port
 
 def stamp(text: str) -> None:
-    """
-    Prints a timestamped log message to stdout with color formatting.
+    """Prints a timestamped log message with color formatting and logs it.
 
-    Parameters:
-        - text: The log message to display.
+    Outputs message to stdout with ISO 8601 timestamp in cyan.
+    Falls back to stderr if stdout fails (e.g., broken pipe).
+    Also logs message via module logger at INFO level.
+
+    Args:
+        text: Log message to display and log.
     """
     date = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
     try:
@@ -1011,24 +1016,22 @@ def stamp(text: str) -> None:
     except (BrokenPipeError, ValueError):
         try:
             sys.stdout.close()
-        except Exception: # pylint: disable=broad-exception-caught
+        except Exception:  # pylint: disable=broad-exception-caught
             pass
         sys.stderr.write(f'\r\n{Color.CYN}{date}{Color.RST} {text}')
         sys.stderr.flush()
     logger.info(text)
 
 def start() -> None:
-    """
-    Initializes and starts the main monitoring loop.
+    """Initializes and starts the main monitoring loop.
 
-    Loads banned and known node data, periodically refreshes the Bitnodes snapshot,
-    spawns a background thread to probe new nodes, and manages peer banning logic
-    at fixed intervals. Handles graceful termination on keyboard interrupt.
+    Configures logging to debug.log, loads initial data, and enters monitoring
+    loop with 10-second intervals. Spawns background probe thread when ready.
+    Handles KeyboardInterrupt for graceful shutdown.
     """
     banner()
 
-    # Configure logger to write to debug.log file only (no console output)
-    # Level: INFO | Mode: append | Format: local timestamp (ISO 8601-like, no timezone)
+    # Configure file logging (INFO level, append mode, ISO 8601 timestamps)
     logger.setLevel(logging.INFO)
     file_handler = logging.FileHandler('debug.log', mode='a', encoding='utf-8')
     file_handler.setFormatter(logging.Formatter(

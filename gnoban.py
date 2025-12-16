@@ -36,22 +36,22 @@ from enum import Enum, StrEnum
 from hashlib import sha256
 from logging import Logger
 from socket import AF_INET, AF_INET6
-from time import time, sleep
-from typing import Dict, Set, Tuple, Union
+from time import sleep, time
+from typing import Any, Dict, Set, Tuple
 from zlib import decompress
 
 # Third-party module imports
 import requests
 from bitcoin.messages import (
-    msg_version as BitcoinMsgver,
+    MsgSerializable,
     msg_verack as BitcoinMsgvack,
-    MsgSerializable
+    msg_version as BitcoinMsgver
 )
 from bitcoin.rpc import (
     JSONRPCError,
     Proxy as BitcoinRPCProxy
 )
-from socks import socksocket, SOCKS5
+from socks import SOCKS5, socksocket
 
 class Version:
     """
@@ -151,7 +151,7 @@ class DefaultOptions:
     max_attempts: int = 3
     unban: bool = False
 
-    def __setattr__(self, name, value):
+    def __setattr__(self, name: str, value: Any) -> None:
         """
         Validates attribute constraints before assignment.
         Calls parent's __setattr__ if validation passes, otherwise raises.
@@ -241,7 +241,7 @@ class Proxy:
     url: Dict[str, str] | None = None
 
     @classmethod
-    def set(cls, proxy: str):
+    def set(cls, proxy: str) -> None:
         """
         Set proxy configuration.
 
@@ -368,13 +368,13 @@ listbanned: Set[str] = set()
 logger: Logger = logging.getLogger(__name__)
 
 # Default settings for bitcoin.rpc.Proxy
-rpc_conf: dict = {
+rpc_conf: dict[str, Any] = {
     'service_url': None,
     'btc_conf_file': None,
     'timeout': 30
 }
 
-def banner():
+def banner() -> None:
     """
     Prints a stylized ASCII banner to standard output.
 
@@ -468,7 +468,7 @@ def build_parser() -> ArgumentParser:
 
     return parser
 
-def check_bitcoind():
+def check_bitcoind() -> None:
     """
     Verifies connectivity with the bitcoin node using RPC.
 
@@ -530,7 +530,7 @@ def compile_node_filter(expr: str) -> str:
 
     return expr
 
-def exec_getpeerinfo():
+def exec_getpeerinfo() -> None:
     """
     Retrieves and processes the current peer information from bitcoind.
 
@@ -592,7 +592,7 @@ def exec_getpeerinfo():
                     f'[{e}]', False)
             continue
 
-def exec_setban(only_recents: bool):
+def exec_setban(only_recents: bool) -> None:
     """
     Bans nodes from the Bitcoin network based on connection time and filtering criteria.
 
@@ -693,7 +693,7 @@ def getdata_node(node: Node) -> Node:
     sock.close()
     return node
 
-def load_allnodes():
+def load_allnodes() -> None:
     """
     Load all known Bitcoin network node addresses into the global allnodes dictionary.
 
@@ -730,7 +730,7 @@ def load_allnodes():
 
     mark(Status.OK, f'Loaded known addresses ({address_count} entries).')
 
-def load_listbanned():
+def load_listbanned() -> None:
     """
     Load the list of banned node addresses into the global listbanned list.
 
@@ -775,7 +775,7 @@ def load_listbanned():
 
     mark(Status.OK, f'Loaded banned addresses ({len(listbanned)} entries).')
 
-def main():
+def main() -> None:
     """
     Entry point of the program that parses command-line arguments and initializes
     program state accordingly.
@@ -823,8 +823,8 @@ def main():
     criteria.service = set(args.service or [])
     criteria.version = set(args.version or [])
 
-    rpc_conf['service_url'] = args.rpcurl if args.rpcurl else None
-    rpc_conf['btc_conf_file'] = args.conf if args.conf else None
+    rpc_conf['service_url'] = args.rpcurl
+    rpc_conf['btc_conf_file'] = args.conf
 
     if args.proxy:
         Proxy.set(args.proxy)
@@ -834,7 +834,7 @@ def main():
     else:
         start()
 
-def mark(status: Union[Color, Status], text: str, answer: bool=True):
+def mark(status: Color | Status, text: str, answer: bool=True) -> None:
     """
     Display a colored status label and message on the console.
 
@@ -887,7 +887,7 @@ def match_node(node: Node) -> bool:
 
     return False
 
-def probe_nodes():
+def probe_nodes() -> None:
     """
     Probes nodes without a connection timestamp to retrieve their metadata.
 
@@ -906,7 +906,7 @@ def probe_nodes():
         futures = set()
         nodes_to_process = iter(nodes_snapshot)
 
-        def submit_batch():
+        def submit_batch() -> None:
             for node in nodes_to_process:
                 node = Node(
                     addr=node.addr,
@@ -930,7 +930,7 @@ def probe_nodes():
     stamp('Probe nodes thread paused for 15 minutes')
     threadctl.finished_at = time()
 
-def snapshot_bitnodes():
+def snapshot_bitnodes() -> None:
     """
     Downloads the latest node snapshot from Bitnodes API and updates the `allnodes` map.
 
@@ -997,7 +997,7 @@ def split_addressport(addressport: str, dport: int=8333) -> Tuple[str, int]:
             address, port = addressport, dport
     return address, port
 
-def stamp(text: str):
+def stamp(text: str) -> None:
     """
     Prints a timestamped log message to stdout with color formatting.
 
@@ -1017,7 +1017,7 @@ def stamp(text: str):
         sys.stderr.flush()
     logger.info(text)
 
-def start():
+def start() -> None:
     """
     Initializes and starts the main monitoring loop.
 

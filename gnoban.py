@@ -60,8 +60,8 @@ class Version:
     Build hash is calculated from source file SHA256 in development mode.
     """
     MAJOR = 1
-    MINOR = 0
-    PATCH = 1
+    MINOR = 1
+    PATCH = 0
 
     @classmethod
     def get_build_hash(cls) -> str | None:

@@ -1041,19 +1041,29 @@ def start():
     try:
         check_bitcoind()
         while True:
+            # Check if probe thread needs to start
             with threadctl.lock:
                 thread_dead = threadctl.thread is None or not threadctl.thread.is_alive()
-                if thread_dead and not threadctl.should_wait():
-                    load_listbanned()
-                    load_allnodes()
-                    snapshot_bitnodes()
-                    msg = {True: 'started', False: 'resumed'}[threadctl.thread is None]
-                    stamp(f'Probe nodes thread {msg}')
+                should_start = thread_dead and not threadctl.should_wait()
+
+            if should_start:
+                # Reload data and start probe thread
+                load_listbanned()
+                load_allnodes()
+                snapshot_bitnodes()
+
+                msg = 'started' if threadctl.thread is None else 'resumed'
+                stamp(f'Probe nodes thread {msg}')
+
+                with threadctl.lock:
                     threadctl.thread = threading.Thread(target=probe_nodes)
                     threadctl.thread.start()
-                    only_recents = False
-                else:
-                    only_recents = True
+
+                only_recents = False
+            else:
+                only_recents = True
+
+            # Process peers and manage bans
             exec_getpeerinfo()
             exec_setban(only_recents)
             sleep(10)

@@ -44,6 +44,7 @@ jobs:
           python -m nuitka \
             --mode=onefile \
             --python-flag=no_docstrings \
+            --no-deployment-flag=self-execution \
             --product-name='GNOBAN' \
             --product-version=${VERSION:1} \
             --file-version=${VERSION:1} \
@@ -101,6 +102,7 @@ jobs:
               python3 -m nuitka \
                 --mode=onefile \
                 --python-flag=no_docstrings \
+                --no-deployment-flag=self-execution \
                 --product-name='GNOBAN' \
                 --product-version=${VERSION:1} \
                 --file-version=${VERSION:1} \
@@ -161,6 +163,7 @@ jobs:
           python -m nuitka \
             --mode=onefile \
             --python-flag=no_docstrings \
+            --no-deployment-flag=self-execution \
             --product-name='GNOBAN' \
             --product-version=${VERSION:1} \
             --file-version=${VERSION:1} \

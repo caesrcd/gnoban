@@ -908,8 +908,7 @@ def probe_nodes() -> None:
             for node in nodes_to_process:
                 node = Node(
                     addr=node.addr,
-                    network=node.network,
-                    attempts=node.attempts
+                    network=node.network
                 )
                 futures.add(executor.submit(getdata_node, node))
                 if len(futures) >= 100:
@@ -920,8 +919,8 @@ def probe_nodes() -> None:
             done, futures = wait(futures, return_when=FIRST_COMPLETED)
             for future in done:
                 node = future.result()
-                node.attempts = node.attempts + 1 if node.is_empty() else 0
                 address, _ = split_addressport(node.addr)
+                node.attempts = allnodes[address].attempts + 1 if node.is_empty() else 0
                 allnodes[address] = node
             submit_batch()
 

@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2025 CaesarCoder <caesrcd@tutamail.com>
+# Copyright (c) 2025-2026 CaesarCoder <caesrcd@tutamail.com>
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or https://opensource.org/licenses/mit-license.php.
 """
@@ -446,7 +446,7 @@ def build_parser() -> ArgumentParser:
     argrp_opt.add_argument('--version', action='version',
         version=textwrap.dedent(f'''
             %(prog)s (GNOBAN) v{__version__}
-            Copyright (C) 2025 CaesarCoder <caesrcd@tutamail.com>
+            Copyright (C) 2025-2026 CaesarCoder <caesrcd@tutamail.com>
             Distributed under the MIT software license, see the accompanying
             file COPYING or https://opensource.org/licenses/mit-license.php.
             '''),

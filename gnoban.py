@@ -6,9 +6,9 @@
 """
 GNOBAN - A program to analyze and ban Bitcoin nodes based on custom criteria.
 
-This program evaluates known nodes on your local full node and the Bitnodes
-Snapshot API. It supports filtering by minimum fee rate, service flags, user
-agent, and protocol version to ban remote nodes on your full node.
+This program evaluates known nodes on your local full node. It supports
+filtering by minimum fee rate, service flags, user agent, and protocol
+version to ban remote nodes on your full node.
 
 Author: CaesarCoder <caesrcd@tutamail.com>
 License: MIT
@@ -41,7 +41,6 @@ from typing import Any, Dict, Set, Tuple
 from zlib import decompress
 
 # Third-party module imports
-import requests
 from bitcoin.messages import (
     MsgSerializable,
     msg_verack as BitcoinMsgvack,
@@ -927,48 +926,6 @@ def probe_nodes() -> None:
     stamp('Probe nodes thread paused for 15 minutes')
     threadctl.finished_at = time()
 
-def snapshot_bitnodes() -> None:
-    """Downloads the latest node snapshot from Bitnodes API.
-
-    Fetches active node addresses from Bitnodes public API and adds any
-    missing nodes to the global allnodes registry. Skips nodes already present.
-    Uses proxy settings if configured.
-    """
-    mark(Status.EMPTY, 'Downloading latest snapshot from Bitnodes...')
-
-    try:
-        response = requests.get(
-            'https://bitnodes.io/api/v1/snapshots/latest/',
-            proxies=Proxy.url,
-            timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        nodeaddresses = data.get('nodes', {})
-    except requests.RequestException as e:
-        mark(Status.FAILED, e)
-        return
-
-    address_count = 0
-    for addressport in nodeaddresses:
-        address, _ = split_addressport(addressport)
-        if allnodes.get(address):
-            continue
-
-        if address.endswith('.onion'):
-            network = 'onion'
-        elif ':' in address:
-            network = 'ipv6'
-        else:
-            network = 'ipv4'
-
-        allnodes[address] = Node(
-            addr=addressport,
-            network=network
-        )
-        address_count += 1
-
-    mark(Status.OK, f'Downloaded latest snapshot from Bitnodes ({address_count} entries).')
-
 def split_addressport(addressport: str, dport: int=8333) -> Tuple[str, int]:
     """Splits an address string into (address, port).
 
@@ -1052,7 +1009,6 @@ def start() -> None:
                 # Reload data and start probe thread
                 load_listbanned()
                 load_allnodes()
-                snapshot_bitnodes()
 
                 msg = 'started' if threadctl.thread is None else 'resumed'
                 stamp(f'Probe nodes thread {msg}')

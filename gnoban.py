@@ -167,12 +167,14 @@ class Filter:
         service: Set of service flags to match.
         useragent: Set of user agent strings to match.
         version: Set of protocol versions to match.
+        vtransport: Set of transport protocol types to match.
     """
     filter_expr: str = ''
     minfeefilter: float = 0
     service: Set[int] = field(default_factory=set)
     useragent: Set[str] = field(default_factory=set)
     version: Set[int] = field(default_factory=set)
+    vtransport: str = ''
 
     def is_empty(self) -> bool:
         """Check if no filter criteria is set.
@@ -197,6 +199,7 @@ class Node:
         version: Protocol version used by the node.
         subver: User agent string of the node.
         minfeefilter: Minimum fee rate of the node (in BTC/kvB).
+        transport_protocol_type: Type of transport protocol (v1 or v2).
     """
     addr: str
     network: str
@@ -206,6 +209,7 @@ class Node:
     version: int = 0
     subver: str = ''
     minfeefilter: float = 0
+    transport_protocol_type: str = ''
 
     def is_empty(self) -> bool:
         """Returns whether the node lacks ALL relevant metadata.
@@ -334,8 +338,8 @@ class ThreadState:
 
         Waiting periods:
           - No wait on first run (finished_at == 0)
-          - 900 seconds (15 min) after successful run with nodes (duration > 10s)
-          - 3600 seconds (1 hour) after run with no nodes (duration <= 10s)
+          - 900 seconds (15 min) after successful run with nodes (duration > 5m)
+          - 3600 seconds (1 hour) after run with no nodes (duration <= 5m)
 
         Returns:
             True if still waiting, False if ready to run.
@@ -344,7 +348,7 @@ class ThreadState:
             return False
         elapsed = time() - self.finished_at
         duration = self.finished_at - self.started_at
-        wait_time = 900 if duration > 10 else 3600
+        wait_time = 900 if duration > 300 else 3600
         return elapsed < wait_time
 
 threadctl = ThreadState()
@@ -409,6 +413,7 @@ def build_parser() -> ArgumentParser:
               ver >= <num>           Match version with comparison operator.
               ua 'pattern'           Match substring in user agent.
               srv <num>              Match if service flag is present.
+              tpt 'v1 or v2'         Match substring against transport protocol types.
 
             Examples:
               %(prog)s -f '(ua "Knots" or srv 26) and not srv 29'
@@ -416,7 +421,7 @@ def build_parser() -> ArgumentParser:
               %(prog)s -rpcurl http://user:pass@192.168.0.10:8332 -s 27
 
             Note:
-              When using simple filters (-m, -s, -u, -v) alongside -f, nodes matching *any* of the conditions will be selected.
+              When using simple filters (-m, -s, -u, -v, -t) alongside -f, nodes matching *any* of the conditions will be selected.
             '''),
         formatter_class=RawDescriptionHelpFormatter
     )
@@ -461,6 +466,8 @@ def build_parser() -> ArgumentParser:
         help="Matches part of the node's user agent.")
     argrp_cri.add_argument('-v', dest='version', metavar='num', type=int, nargs='+',
         help='Protocol version of the node.')
+    argrp_cri.add_argument('-t', dest='vtransport', type=lambda x: x.lower(),
+        choices=['v1', 'v2'], help="Match transport protocol types of the node.")
 
     return parser
 
@@ -497,6 +504,7 @@ def compile_node_filter(expr: str) -> str:
       - ua 'pattern'    → re.search(r'pattern', node.subver)
       - ver N           → node.version == N
       - ver >= N        → node.version >= N
+      - tpt 'v1'        → node.transport_protocol_type == 'v1'
 
     Args:
         expr: A user-provided filter string.
@@ -520,6 +528,10 @@ def compile_node_filter(expr: str) -> str:
     expr = re.sub(r'\bua\s+[\'"](.+?)[\'"]', r"re.search(r'\1', node.subver)", expr)
     expr = re.sub(r'\bver\s+(\d+)', r'node.version == \1', expr)
     expr = re.sub(r'\bver\s*([=!<>]+)\s*(\d+)', r'node.version \1 \2', expr)
+    expr = re.sub(r'\btpt\s+[\'"](.+?)[\'"]', lambda m: (
+        f"(node.transport_protocol_type and "
+        f"node.transport_protocol_type == '{m.group(1).lower()}')"
+    ), expr)
 
     return expr
 
@@ -557,7 +569,8 @@ def exec_getpeerinfo() -> None:
             conntime=conntime,
             version=version,
             subver=peer.get('subver'),
-            minfeefilter=float(peer.get('minfeefilter'))
+            minfeefilter=float(peer.get('minfeefilter')),
+            transport_protocol_type=peer.get('transport_protocol_type')
         )
 
         address, _ = split_addressport(node.addr)
@@ -570,6 +583,7 @@ def exec_getpeerinfo() -> None:
             try:
                 rpc_proxy.call('disconnectnode', node.addr)
                 stamp(f'Node disconnected: net={node.network}, services={node.services}, '
+                    f'transport={node.transport_protocol_type}, '
                     f'version={str(node.version)}{node.subver}')
             except JSONRPCError as e:
                 if e.args[0].get('code') != -29:
@@ -613,6 +627,7 @@ def exec_setban(only_recents: bool) -> None:
         else:
             msg = (
                 f'Node: net={node.network}, services={node.services}, '
+                f'transport={node.transport_protocol_type}, '
                 f'version={str(node.version)}{node.subver}'
             )
             is_match = match_node(node)
@@ -809,6 +824,7 @@ def main() -> None:
     criteria.minfeefilter = args.minfeefilter or 0
     criteria.service = set(args.service or [])
     criteria.version = set(args.version or [])
+    criteria.vtransport = args.vtransport or ''
 
     # Configure RPC connection
     rpc_conf['service_url'] = args.rpcurl
@@ -880,6 +896,12 @@ def match_node(node: Node) -> bool:
         if eval(criteria.filter_expr, {}, {'node': node, 're': re}):
             return True
 
+    if (
+        criteria.vtransport and node.transport_protocol_type
+        and node.transport_protocol_type == criteria.vtransport
+    ):
+        return True
+
     return False
 
 def probe_nodes() -> None:
@@ -923,8 +945,11 @@ def probe_nodes() -> None:
                 allnodes[address] = node
             submit_batch()
 
-    stamp('Probe nodes thread paused for 15 minutes')
     threadctl.finished_at = time()
+    if threadctl.finished_at - threadctl.started_at > 300:
+        stamp('Probe nodes thread paused for 15 minutes')
+    else:
+        stamp('Probe nodes thread paused for 1 hour')
 
 def split_addressport(addressport: str, dport: int=8333) -> Tuple[str, int]:
     """Splits an address string into (address, port).

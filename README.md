@@ -19,6 +19,7 @@ A program to analyze and ban Bitcoin nodes based on custom criteria.
   - Protocol version
   - User agent substring match
   - Service flags
+  - Transport protocol type (v1/v2)
 - Unbans nodes that no longer meet the criteria
 - Unbans inactive addresses after multiple failed attempts
 - Supports SOCKS5 proxy connections
@@ -78,7 +79,7 @@ If you run GNOBAN on the same computer as your Bitcoin node, it will automatical
 
 If your configuration file is in a non-default location, specify the correct path using the `-conf` argument. For example:
 ```bash
-gnoban -conf /path/the/bitcoin/bitcoin.conf ...
+gnoban -conf /path/to/bitcoin.conf ...
 ```
 
 If you are running GNOBAN on another computer, you’ll need to specify the IP address and port of your Bitcoin node, along with the RPC username and password. For example:

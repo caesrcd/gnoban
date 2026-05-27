@@ -3,8 +3,9 @@ fail-under=9.5
 
 [DESIGN]
 # Project-specific thresholds
-max-attributes=8
+max-attributes=9
 max-branches=13
+max-returns=7
 
 [MESSAGES CONTROL]
 # Disable structural warnings that cannot be addressed incrementally

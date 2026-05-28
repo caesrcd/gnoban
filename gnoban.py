@@ -535,6 +535,30 @@ def compile_node_filter(expr: str) -> str:
 
     return expr
 
+def detect_v2transport(node: Node) -> bool:
+    """Heuristically detect whether a Bitcoin peer supports v2 transport.
+
+    Opens a socket to the target node, sends a 64-byte random probe,
+    and attempts to read a response. Receiving data is interpreted as
+    v2 transport support.
+
+    Args:
+        node: Target node to probe for transport detection.
+
+    Returns:
+        True if the peer responds to the probe, indicating v2 transport
+        support, otherwise False.
+    """
+    sock = SocketFactory.create_socket(node.network)
+    try:
+        sock.connect(split_addressport(node.addr))
+        sock.send(os.urandom(64))
+        return bool(SocketFactory.read_bytes(sock, 64))
+    except Exception:  # pylint: disable=broad-exception-caught
+        return False
+    finally:
+        sock.close()
+
 def exec_getpeerinfo() -> None:
     """Retrieves and processes the current peer information from bitcoind.
 
@@ -671,8 +695,7 @@ def getdata_node(node: Node) -> Node:
     sock = SocketFactory.create_socket(node.network)
 
     try:
-        address, port = split_addressport(node.addr)
-        sock.connect((address, port))
+        sock.connect(split_addressport(node.addr))
         msg_version = BitcoinMsgver()
         msg_version.nVersion = 70016
         msg_version.fRelay = False
@@ -698,6 +721,13 @@ def getdata_node(node: Node) -> Node:
         pass
 
     sock.close()
+
+    if not node.is_empty():
+        if detect_v2transport(node):
+            node.transport_protocol_type = 'v2'
+        elif not node.services & (1 << 11):
+            node.transport_protocol_type = 'v1'
+
     return node
 
 def load_allnodes() -> None:

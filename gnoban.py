@@ -136,13 +136,15 @@ class DefaultOptions:
         bantime: Time in seconds how long the node is banned.
         max_attempts: Max failed attempts before unbanning inactive nodes.
         unban: Enable unbanning of nodes that do not meet the criteria.
+        service: Service flags to match against (each value between 0 and 63).
 
     Raises:
-        ValueError: If validation fails for bantime or max_attempts.
+        ValueError: If validation fails for an attribute value.
     """
     bantime: int = 31536000
     max_attempts: int = 3
     unban: bool = False
+    service: list | None = None
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Validates attribute constraints before assignment."""
@@ -151,6 +153,13 @@ class DefaultOptions:
             raise ValueError(f"{msg_pre}: value must be at least 1: '{value}'")
         if name == 'max_attempts' and value < 1:
             raise ValueError(f"{msg_pre}: value must be at least 1: '{value}'")
+        if name == 'service' and value is not None:
+            msg_pre = 'argument -s'
+            for s in value:
+                if s < 0:
+                    raise ValueError(f"{msg_pre}: value must be at least 0: '{s}'")
+                if s > 63:
+                    raise ValueError(f"{msg_pre}: value out of range (0-63): '{s}'")
         super().__setattr__(name, value)
 
 opts = DefaultOptions()

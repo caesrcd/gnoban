@@ -26,10 +26,10 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -60,7 +60,7 @@ jobs:
           ./build/gnoban --version
 
       - name: Upload built executable
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gnoban-${{ env.VERSION }}-${{ matrix.name }}
           path: build/gnoban
@@ -77,7 +77,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Build
         run: |
@@ -120,7 +120,7 @@ jobs:
           ./build/gnoban --version
 
       - name: Upload built executable
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gnoban-${{ env.VERSION }}-${{ matrix.name }}
           path: build/gnoban
@@ -137,10 +137,10 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -180,7 +180,7 @@ jobs:
           ./build/gnoban.exe --version
 
       - name: Upload built executable
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: gnoban-${{ env.VERSION }}-${{ matrix.name }}
           path: build/gnoban.exe

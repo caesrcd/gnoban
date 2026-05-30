@@ -392,94 +392,6 @@ def banner() -> None:
     )
     sys.stdout.write(decompress(b64decode(banner_encoded)).decode())
 
-def build_parser() -> ArgumentParser:
-    """Builds and returns the command-line argument parser.
-
-    Creates an ArgumentParser with two main argument groups:
-      - Options: Program configuration (bantime, proxy, RPC connection, etc.)
-      - Criteria: Node filtering rules (expressions, minfeefilter, services, etc.)
-
-    Supports complex filter expressions with logical operators (and, or, not)
-    and comparison operators for protocol versions.
-
-    Returns:
-        Configured parser ready to parse command-line arguments.
-    """
-    parser = ArgumentParser(
-        add_help=False,
-        usage='%(prog)s [options]... [criteria]...',
-        description=(
-            'Scan and evaluate known nodes to determine which should be banned '
-            'based on specified criteria.'
-        ),
-        epilog=textwrap.dedent('''\
-            Complex filter expressions can be built using the keywords `and`, `or`, and `not`
-            to combine primitives. You may also use `&&`, `||`, and `!` as shorthand for these.
-
-            Valid primitives:
-              mff <num>              Match if minfeefilter is greater than <num> (BTC/kvB).
-              ver <num>              Match node protocol version.
-              ver >= <num>           Match version with comparison operator.
-              ua 'pattern'           Match substring in user agent.
-              srv <num>              Match if service flag is present.
-              tpt 'v1 or v2'         Match substring against transport protocol types.
-
-            Examples:
-              %(prog)s -f '(ua "Knots" or srv 26) and not srv 29'
-              %(prog)s -conf /mnt/btc/bitcoin.conf --unban -m 0.000009
-              %(prog)s -rpcurl http://user:pass@192.168.0.10:8332 -s 27
-
-            Note:
-              When using simple filters (-m, -s, -u, -v, -t) alongside -f, nodes matching *any* of the conditions will be selected.
-            '''),
-        formatter_class=RawDescriptionHelpFormatter
-    )
-    parser.add_argument('-h', '--help', action='help', help=SUPPRESS)
-    argrp_opt = parser.add_argument_group('Options')
-    argrp_opt.add_argument('-bantime', metavar='num', type=int,
-        default=opts.bantime, help=(
-            'Time in seconds how long the node is banned. '
-            f'(default: {opts.bantime})'
-        )
-    )
-    argrp_opt.add_argument('-conf', metavar="'str'", type=str,
-        help='Specify the Bitcoin node configuration file.')
-    argrp_opt.add_argument('-max-attempts', metavar='num', type=int,
-        default=opts.max_attempts, help=(
-            'Max failed attempts before unbanning inactive nodes. '
-            f'(default: {opts.max_attempts})'
-        )
-    )
-    argrp_opt.add_argument('-proxy', metavar='ip[:port]', type=str,
-        help='Connect through SOCKS5 proxy.')
-    argrp_opt.add_argument('-rpcurl', metavar="'str'", type=str,
-        help='Specify the Bitcoin node RPC endpoint.')
-    argrp_opt.add_argument('--unban', action='store_true',
-        help='Enable unbanning of nodes that do not meet the criteria.')
-    argrp_opt.add_argument('--version', action='version',
-        version=textwrap.dedent(f'''
-            %(prog)s (GNOBAN) v{__version__}
-            Copyright (C) 2025-2026 CaesarCoder <caesrcd@tutamail.com>
-            Distributed under the MIT software license, see the accompanying
-            file COPYING or https://opensource.org/licenses/mit-license.php.
-            '''),
-        help='Show version information.')
-    argrp_cri = parser.add_argument_group('Criteria')
-    argrp_cri.add_argument('-f', '--filter', metavar="'expr'", type=str,
-        help='Filter nodes using logical expressions.')
-    argrp_cri.add_argument('-m', dest='minfeefilter', metavar='num', type=float,
-        help='Match if minfeefilter is greater than <num> (BTC/kvB).')
-    argrp_cri.add_argument('-s', dest='service', metavar='num', type=int, nargs='+',
-        help='Service flags provided by the node.')
-    argrp_cri.add_argument('-u', dest='useragent', metavar="'str'", type=str, nargs='+',
-        help="Matches part of the node's user agent.")
-    argrp_cri.add_argument('-v', dest='version', metavar='num', type=int, nargs='+',
-        help='Protocol version of the node.')
-    argrp_cri.add_argument('-t', dest='vtransport', type=lambda x: x.lower(),
-        choices=['v1', 'v2'], help="Match transport protocol types of the node.")
-
-    return parser
-
 def check_bitcoind() -> None:
     """Verifies connectivity with the bitcoin node using RPC.
 
@@ -826,7 +738,7 @@ def main() -> None:
     filter expressions), configures proxy settings, and calls start() if criteria
     are valid. Prints help and exits if no criteria specified or validation fails.
     """
-    parser = build_parser()
+    parser = parse_argument()
     args = parser.parse_args()
 
     # Copy parsed arguments to DefaultOptions instance (validates constraints)
@@ -942,6 +854,94 @@ def match_node(node: Node) -> bool:
         return True
 
     return False
+
+def parse_argument() -> ArgumentParser:
+    """Creates and configures the command-line argument parser.
+
+    Creates an ArgumentParser with two main argument groups:
+      - Options: Program configuration (bantime, proxy, RPC connection, etc.)
+      - Criteria: Node filtering rules (expressions, minfeefilter, services, etc.)
+
+    Supports complex filter expressions with logical operators (and, or, not)
+    and comparison operators for protocol versions.
+
+    Returns:
+        Configured parser ready to parse command-line arguments.
+    """
+    parser = ArgumentParser(
+        add_help=False,
+        usage='%(prog)s [options]... [criteria]...',
+        description=(
+            'Scan and evaluate known nodes to determine which should be banned '
+            'based on specified criteria.'
+        ),
+        epilog=textwrap.dedent('''\
+            Complex filter expressions can be built using the keywords `and`, `or`, and `not`
+            to combine primitives. You may also use `&&`, `||`, and `!` as shorthand for these.
+
+            Valid primitives:
+              mff <num>              Match if minfeefilter is greater than <num> (BTC/kvB).
+              ver <num>              Match node protocol version.
+              ver >= <num>           Match version with comparison operator.
+              ua 'pattern'           Match substring in user agent.
+              srv <num>              Match if service flag is present.
+              tpt 'v1 or v2'         Match substring against transport protocol types.
+
+            Examples:
+              %(prog)s -f '(ua "Knots" or srv 26) and not srv 29'
+              %(prog)s -conf /mnt/btc/bitcoin.conf --unban -m 0.000009
+              %(prog)s -rpcurl http://user:pass@192.168.0.10:8332 -s 27
+
+            Note:
+              When using simple filters (-m, -s, -u, -v, -t) alongside -f, nodes matching *any* of the conditions will be selected.
+            '''),
+        formatter_class=RawDescriptionHelpFormatter
+    )
+    parser.add_argument('-h', '--help', action='help', help=SUPPRESS)
+    argrp_opt = parser.add_argument_group('Options')
+    argrp_opt.add_argument('-bantime', metavar='num', type=int,
+        default=opts.bantime, help=(
+            'Time in seconds how long the node is banned. '
+            f'(default: {opts.bantime})'
+        )
+    )
+    argrp_opt.add_argument('-conf', metavar="'str'", type=str,
+        help='Specify the Bitcoin node configuration file.')
+    argrp_opt.add_argument('-max-attempts', metavar='num', type=int,
+        default=opts.max_attempts, help=(
+            'Max failed attempts before unbanning inactive nodes. '
+            f'(default: {opts.max_attempts})'
+        )
+    )
+    argrp_opt.add_argument('-proxy', metavar='ip[:port]', type=str,
+        help='Connect through SOCKS5 proxy.')
+    argrp_opt.add_argument('-rpcurl', metavar="'str'", type=str,
+        help='Specify the Bitcoin node RPC endpoint.')
+    argrp_opt.add_argument('--unban', action='store_true',
+        help='Enable unbanning of nodes that do not meet the criteria.')
+    argrp_opt.add_argument('--version', action='version',
+        version=textwrap.dedent(f'''
+            %(prog)s (GNOBAN) v{__version__}
+            Copyright (C) 2025-2026 CaesarCoder <caesrcd@tutamail.com>
+            Distributed under the MIT software license, see the accompanying
+            file COPYING or https://opensource.org/licenses/mit-license.php.
+            '''),
+        help='Show version information.')
+    argrp_cri = parser.add_argument_group('Criteria')
+    argrp_cri.add_argument('-f', '--filter', metavar="'expr'", type=str,
+        help='Filter nodes using logical expressions.')
+    argrp_cri.add_argument('-m', dest='minfeefilter', metavar='num', type=float,
+        help='Match if minfeefilter is greater than <num> (BTC/kvB).')
+    argrp_cri.add_argument('-s', dest='service', metavar='num', type=int, nargs='+',
+        help='Service flags provided by the node.')
+    argrp_cri.add_argument('-u', dest='useragent', metavar="'str'", type=str, nargs='+',
+        help="Matches part of the node's user agent.")
+    argrp_cri.add_argument('-v', dest='version', metavar='num', type=int, nargs='+',
+        help='Protocol version of the node.')
+    argrp_cri.add_argument('-t', dest='vtransport', type=lambda x: x.lower(),
+        choices=['v1', 'v2'], help="Match transport protocol types of the node.")
+
+    return parser
 
 def probe_nodes() -> None:
     """Probes nodes without metadata to retrieve version information.

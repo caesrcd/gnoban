@@ -93,8 +93,6 @@ class Version:
 
         return version
 
-__version__ = Version.get_full_version()
-
 class Color(StrEnum):
     """ANSI color codes used for formatting terminal output.
 
@@ -129,7 +127,7 @@ class Status(Enum):
         return self.value[1]
 
 @dataclass
-class DefaultOptions:
+class Options:
     """Configuration options for ban management.
 
     Attributes:
@@ -144,28 +142,21 @@ class DefaultOptions:
     bantime: int = 31536000
     max_attempts: int = 3
     unban: bool = False
-    service: list | None = None
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Validates attribute constraints before assignment."""
+        if not value:
+            return
         msg_pre = f'argument -{name}'
-        if name == 'bantime' and value < 1:
-            raise ValueError(f"{msg_pre}: value must be at least 1: '{value}'")
-        if name == 'max_attempts' and value < 1:
-            raise ValueError(f"{msg_pre}: value must be at least 1: '{value}'")
-        if name == 'service' and value is not None:
-            msg_pre = 'argument -s'
-            for s in value:
-                if s < 0:
-                    raise ValueError(f"{msg_pre}: value must be at least 0: '{s}'")
-                if s > 63:
-                    raise ValueError(f"{msg_pre}: value out of range (0-63): '{s}'")
+        if name in ['bantime', 'max_attempts']:
+            if isinstance(value, str) and not value.isdigit():
+                raise ValueError(f'{msg_pre}: invalid int value: {value!r}')
+            if value < 1:
+                raise ValueError(f'{msg_pre}: value must be at least 1: {value!r}')
         super().__setattr__(name, value)
 
-opts = DefaultOptions()
-
 @dataclass
-class Filter:
+class Criteria:
     """Criteria used to filter nodes based on specific attributes.
 
     Each attribute has a default value. Empty/zero values mean the filter is not applied.
@@ -176,14 +167,45 @@ class Filter:
         service: Set of service flags to match.
         useragent: Set of user agent strings to match.
         version: Set of protocol versions to match.
-        vtransport: Set of transport protocol types to match.
+        transport: Set of transport protocol types to match.
     """
     filter_expr: str = ''
     minfeefilter: float = 0
     service: Set[int] = field(default_factory=set)
     useragent: Set[str] = field(default_factory=set)
     version: Set[int] = field(default_factory=set)
-    vtransport: str = ''
+    transport: str = ''
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Validates attribute constraints before assignment."""
+        if not value:
+            return
+        msg_pre = f'argument {name} (-{name[0]})'
+        if name == 'filter_expr':
+            parsed_expr = compile_node_filter(value)
+            try:
+                ast.parse(parsed_expr, mode='eval')
+                node_test = Node(addr='', network='')
+                # pylint: disable=eval-used
+                eval(parsed_expr, {}, {'node': node_test, 're': re})
+                value = parsed_expr
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                raise ValueError(f'{msg_pre}: invalid filter expression: {value!r}') from exc
+        if name == 'service':
+            for v in value:
+                if isinstance(v, str) and not v.isdigit():
+                    raise ValueError(f'{msg_pre}: invalid int value: {v!r}')
+                if v < 0:
+                    raise ValueError(f'{msg_pre}: value must be at least 0: {v!r}')
+                if v > 63:
+                    raise ValueError(f'{msg_pre}: value out of range (0-63): {v!r}')
+        if name == 'useragent':
+            for pattern in value:
+                try:
+                    re.compile(pattern)
+                except re.error as exc:
+                    raise ValueError(f'{msg_pre}: invalid regex: {pattern!r}') from exc
+        super().__setattr__(name, value)
 
     def is_empty(self) -> bool:
         """Check if no filter criteria is set.
@@ -192,8 +214,6 @@ class Filter:
             True if all filter attributes are empty/falsy, False otherwise.
         """
         return not any(self.__dict__.values())
-
-criteria = Filter()
 
 @dataclass
 class Node:
@@ -228,8 +248,6 @@ class Node:
         """
         # Note: addr, network, attempts, and minfeefilter are not checked
         return not (self.conntime or self.services or self.version or self.subver)
-
-allnodes: Dict[str, Node] = {}
 
 class Proxy:
     """Global proxy configuration settings (static class).
@@ -359,24 +377,6 @@ class ThreadState:
         duration = self.finished_at - self.started_at
         wait_time = 900 if duration > 300 else 3600
         return elapsed < wait_time
-
-threadctl = ThreadState()
-
-DEFAULT_I2P_SOCKS_PORT: int = 4447  # Standard I2P SOCKS5 port
-DEFAULT_TOR_SOCKS_PORT: int = 9050  # Standard Tor SOCKS5 port
-
-# Set of banned node addresses (format: "ip:port")
-listbanned: Set[str] = set()
-
-# Module-level logger
-logger: Logger = logging.getLogger(__name__)
-
-# Configuration for Bitcoin RPC connection via bitcoin.rpc.Proxy
-rpc_conf: dict[str, Any] = {
-    'service_url': None,    # RPC endpoint URL
-    'btc_conf_file': None,  # Path to bitcoin.conf
-    'timeout': 30           # Request timeout (seconds)
-}
 
 def banner() -> None:
     """Prints a stylized ASCII banner to standard output.
@@ -561,7 +561,7 @@ def exec_setban(only_recents: bool) -> None:
         return
 
     for address, node in allnodes.items():
-        if node.attempts >= opts.max_attempts and address in listbanned:
+        if node.attempts >= options.max_attempts and address in listbanned:
             action, op = 'remove', None
             msg = (
                 'Node inactive: The address was unbanned after '
@@ -578,8 +578,8 @@ def exec_setban(only_recents: bool) -> None:
             is_match = match_node(node)
 
             if is_match and address not in listbanned:
-                action, op = ('add', opts.bantime), 'banned'
-            elif opts.unban and not is_match and address in listbanned:
+                action, op = ('add', options.bantime), 'banned'
+            elif options.unban and not is_match and address in listbanned:
                 action, op = 'remove', 'unbanned'
             else:
                 continue
@@ -710,7 +710,7 @@ def load_listbanned() -> None:
         address = node['address'].split('/')[0]
         listbanned.add(address)
 
-        if not opts.unban or allnodes.get(address):
+        if not options.unban or allnodes.get(address):
             continue
 
         if address.endswith('.onion'):
@@ -738,44 +738,19 @@ def main() -> None:
     filter expressions), configures proxy settings, and calls start() if criteria
     are valid. Prints help and exits if no criteria specified or validation fails.
     """
-    parser = parse_argument()
-    args = parser.parse_args()
+    argparser = parse_argument()
+    args = argparser.parse_args()
 
-    # Copy parsed arguments to DefaultOptions instance (validates constraints)
+    # Copy parsed arguments to Options and Criteria instance (validates constraints)
     try:
-        for f in fields(DefaultOptions):
-            if hasattr(args, f.name):
-                setattr(opts, f.name, getattr(args, f.name))
+        for o in fields(Options):
+            if hasattr(args, o.name):
+                setattr(options, o.name, getattr(args, o.name))
+        for c in fields(Criteria):
+            if hasattr(args, c.name):
+                setattr(criteria, c.name, getattr(args, c.name))
     except ValueError as e:
-        parser.error(e)
-
-    # Validate user agent regex patterns
-    if args.useragent:
-        try:
-            for pattern in args.useragent:
-                re.compile(pattern)
-            criteria.useragent = set(args.useragent)
-        except re.error as e:
-            parser.error(f'argument -u: invalid regex: {e}')
-
-    # Validate filter expression via AST parsing and test evaluation
-    if args.filter:
-        parsed_expr = compile_node_filter(args.filter)
-        try:
-            ast.parse(parsed_expr, mode='eval')
-            criteria.filter_expr = parsed_expr
-            node_test = Node(addr='', network='')
-            # pylint: disable=eval-used
-            eval(criteria.filter_expr, {}, {'node': node_test, 're': re})
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            msg = getattr(e, 'msg', str(e))
-            parser.error(f'argument -f: invalid filter expression: {msg}')
-
-    # Set filtering criteria
-    criteria.minfeefilter = args.minfeefilter or 0
-    criteria.service = set(args.service or [])
-    criteria.version = set(args.version or [])
-    criteria.vtransport = args.vtransport or ''
+        argparser.error(e)
 
     # Configure RPC connection
     rpc_conf['service_url'] = args.rpcurl
@@ -787,7 +762,7 @@ def main() -> None:
 
     # Start processing if criteria are specified
     if criteria.is_empty():
-        parser.print_help()
+        argparser.print_help()
     else:
         start()
 
@@ -848,8 +823,8 @@ def match_node(node: Node) -> bool:
             return True
 
     if (
-        criteria.vtransport and node.transport_protocol_type
-        and node.transport_protocol_type == criteria.vtransport
+        criteria.transport and node.transport_protocol_type
+        and node.transport_protocol_type == criteria.transport
     ):
         return True
 
@@ -900,17 +875,17 @@ def parse_argument() -> ArgumentParser:
     parser.add_argument('-h', '--help', action='help', help=SUPPRESS)
     argrp_opt = parser.add_argument_group('Options')
     argrp_opt.add_argument('-bantime', metavar='num', type=int,
-        default=opts.bantime, help=(
+        default=options.bantime, help=(
             'Time in seconds how long the node is banned. '
-            f'(default: {opts.bantime})'
+            f'(default: {options.bantime})'
         )
     )
     argrp_opt.add_argument('-conf', metavar="'str'", type=str,
         help='Specify the Bitcoin node configuration file.')
     argrp_opt.add_argument('-max-attempts', metavar='num', type=int,
-        default=opts.max_attempts, help=(
+        default=options.max_attempts, help=(
             'Max failed attempts before unbanning inactive nodes. '
-            f'(default: {opts.max_attempts})'
+            f'(default: {options.max_attempts})'
         )
     )
     argrp_opt.add_argument('-proxy', metavar='ip[:port]', type=str,
@@ -928,7 +903,7 @@ def parse_argument() -> ArgumentParser:
             '''),
         help='Show version information.')
     argrp_cri = parser.add_argument_group('Criteria')
-    argrp_cri.add_argument('-f', '--filter', metavar="'expr'", type=str,
+    argrp_cri.add_argument('-f', dest='filter_expr', metavar="'expr'", type=str,
         help='Filter nodes using logical expressions.')
     argrp_cri.add_argument('-m', dest='minfeefilter', metavar='num', type=float,
         help='Match if minfeefilter is greater than <num> (BTC/kvB).')
@@ -938,7 +913,7 @@ def parse_argument() -> ArgumentParser:
         help="Matches part of the node's user agent.")
     argrp_cri.add_argument('-v', dest='version', metavar='num', type=int, nargs='+',
         help='Protocol version of the node.')
-    argrp_cri.add_argument('-t', dest='vtransport', type=lambda x: x.lower(),
+    argrp_cri.add_argument('-t', dest='transport', type=lambda x: x.lower(),
         choices=['v1', 'v2'], help="Match transport protocol types of the node.")
 
     return parser
@@ -1092,6 +1067,40 @@ def start() -> None:
     except KeyboardInterrupt:
         stamp('Shutdown: done\r\n')
         os._exit(0)
+
+# Full program version string
+__version__ = Version.get_full_version()
+
+# Ban management configuration
+options = Options()
+
+# Node filtering criteria
+criteria = Criteria()
+
+# Registry of all known nodes
+allnodes: Dict[str, Node] = {}
+
+# Background thread lifecycle state
+threadctl = ThreadState()
+
+# Set of banned node addresses (format: "ip:port")
+listbanned: Set[str] = set()
+
+# Module-level logger
+logger: Logger = logging.getLogger(__name__)
+
+# Configuration for Bitcoin RPC connection via bitcoin.rpc.Proxy
+rpc_conf: dict[str, Any] = {
+    'service_url': None,    # RPC endpoint URL
+    'btc_conf_file': None,  # Path to bitcoin.conf
+    'timeout': 30           # Request timeout (seconds)
+}
+
+# Standard I2P SOCKS5 port
+DEFAULT_I2P_SOCKS_PORT: int = 4447
+
+# Standard Tor SOCKS5 port
+DEFAULT_TOR_SOCKS_PORT: int = 9050
 
 if __name__ == '__main__':
     main()

@@ -35,6 +35,7 @@ from datetime import datetime
 from enum import Enum, StrEnum
 from hashlib import sha256
 from logging import Logger
+from pathlib import Path
 from socket import AF_INET, AF_INET6
 from time import sleep, time
 from typing import Any, Dict, Set, Tuple
@@ -135,27 +136,53 @@ class Options:
 
     Attributes:
         bantime: Time in seconds how long the node is banned.
-        max_attempts: Max failed attempts before unbanning inactive nodes.
-        unban: Enable unbanning of nodes that do not meet the criteria.
-        service: Service flags to match against (each value between 0 and 63).
+        btcdir: Bitcoin node data directory path.
+        conf: Configuration file path.
+        logfile: Log file path.
+        maxattempts: Max failed attempts before unbanning inactive nodes.
+        proxy: SOCKS5 proxy address.
+        rpcurl: Bitcoin node RPC endpoint.
+        unban: Flag to unban nodes that do not meet the criteria.
 
     Raises:
         ValueError: If validation fails for an attribute value.
     """
     bantime: int = 31536000
-    max_attempts: int = 3
+    btcdir: str | None = None
+    conf: str | None = None
+    logfile: str = 'gnoban.log'
+    maxattempts: int = 3
+    proxy: str | None = None
+    rpcurl: str | None = None
     unban: bool = False
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Validates attribute constraints before assignment."""
         if not value:
             return
-        msg_pre = f'argument -{name}'
-        if name in ['bantime', 'max_attempts']:
+        msg_pre = f'argument {name} (-{name})'
+        if name in ['bantime', 'maxattempts']:
             if isinstance(value, str) and not value.isdigit():
                 raise ValueError(f'{msg_pre}: invalid int value: {value!r}')
+            value = int(value)
             if value < 1:
                 raise ValueError(f'{msg_pre}: value must be at least 1: {value!r}')
+        elif name == 'btcdir':
+            path = Path(str(value))
+            if path.is_dir():
+                value = str(path / 'bitcoin.conf')
+        elif name == 'logfile':
+            path = Path(str(value))
+            if path.is_dir():
+                value = str(path / 'gnoban.log')
+        elif name == 'unban':
+            if isinstance(value, str):
+                value = value.lower()
+                if value not in ('0', '1', 'true', 'false'):
+                    raise ValueError(f'{msg_pre}: invalid bool value: {value!r}')
+                value = value in ('1', 'true')
+            elif isinstance(value, int):
+                value = bool(value)
         super().__setattr__(name, value)
 
 @dataclass
@@ -573,7 +600,7 @@ def exec_setban(only_recents: bool) -> None:
         return
 
     for address, node in allnodes.items():
-        if node.attempts >= options.max_attempts and address in listbanned:
+        if node.attempts >= options.maxattempts and address in listbanned:
             action, op = 'remove', None
             msg = (
                 'Node inactive: The address was unbanned after '
@@ -892,12 +919,16 @@ def parse_argument() -> ArgumentParser:
             f'(default: {options.bantime})'
         )
     )
+    argrp_opt.add_argument('-btcdir', metavar="'str'", type=str,
+        help='Specify the Bitcoin node data directory path.')
     argrp_opt.add_argument('-conf', metavar="'str'", type=str,
-        help='Specify the Bitcoin node configuration file.')
-    argrp_opt.add_argument('-max-attempts', metavar='num', type=int,
-        default=options.max_attempts, help=(
+        help='Specify the configuration file.')
+    argrp_opt.add_argument('-logfile', metavar="'str'", type=str,
+        help='Specify location of log file.')
+    argrp_opt.add_argument('-maxattempts', metavar='num', type=int,
+        default=options.maxattempts, help=(
             'Max failed attempts before unbanning inactive nodes. '
-            f'(default: {options.max_attempts})'
+            f'(default: {options.maxattempts})'
         )
     )
     argrp_opt.add_argument('-proxy', metavar='ip[:port]', type=str,
@@ -1040,7 +1071,7 @@ def start() -> None:
 
     # Configure file logging (INFO level, append mode, ISO 8601 timestamps)
     logger.setLevel(logging.INFO)
-    file_handler = logging.FileHandler('debug.log', mode='a', encoding='utf-8')
+    file_handler = logging.FileHandler(options.logfile, mode='a', encoding='utf-8')
     file_handler.setFormatter(logging.Formatter(
         fmt='%(asctime)s [%(levelname)s] %(message)s',
         datefmt='%Y-%m-%dT%H:%M:%S'

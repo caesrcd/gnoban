@@ -773,33 +773,40 @@ def load_listbanned() -> None:
     mark(Status.OK, f'Loaded banned addresses ({len(listbanned)} entries).')
 
 def main() -> None:
-    """Entry point that parses CLI arguments, validates filters, and starts processing.
+    """Entry point that parses CLI arguments, loads config, and starts processing.
 
-    Parses command-line arguments, validates filtering criteria (regex patterns,
-    filter expressions), configures proxy settings, and calls start() if criteria
-    are valid. Prints help and exits if no criteria specified or validation fails.
+    Parses command-line arguments and configuration file, applying both to
+    options and criteria. Configures RPC and proxy settings, then calls
+    start() if criteria are valid, or prints help if no criteria are specified.
     """
-    argparser = parse_argument()
-    args = argparser.parse_args()
+    def _apply_fields(source, *targets):
+        """Copies matching fields from source to each target, triggering their validation."""
+        for target in targets:
+            for f in fields(target):
+                if hasattr(source, f.name):
+                    setattr(target, f.name, getattr(source, f.name))
 
-    # Copy parsed arguments to Options and Criteria instance (validates constraints)
+    # Apply CLI arguments to Options and Criteria (validates constraints)
+    argparser = parse_argument()
     try:
-        for o in fields(Options):
-            if hasattr(args, o.name):
-                setattr(options, o.name, getattr(args, o.name))
-        for c in fields(Criteria):
-            if hasattr(args, c.name):
-                setattr(criteria, c.name, getattr(args, c.name))
+        _apply_fields(argparser.parse_args(), options, criteria)
     except ValueError as e:
         argparser.error(e)
 
+    # Apply config file settings to Options and Criteria (validates constraints)
+    try:
+        _apply_fields(parse_config(), options, criteria)
+    except ValueError as e:
+        mark(Status.ERROR, f'Config file: {e}\r\n')
+        sys.exit(2)
+
     # Configure RPC connection
-    rpc_conf['service_url'] = args.rpcurl
-    rpc_conf['btc_conf_file'] = args.conf
+    rpc_conf['service_url'] = options.rpcurl
+    rpc_conf['btc_conf_file'] = options.btcdir
 
     # Configure proxy if provided
-    if args.proxy:
-        Proxy.set(args.proxy)
+    if options.proxy:
+        Proxy.set(options.proxy)
 
     # Start processing if criteria are specified
     if criteria.is_empty():

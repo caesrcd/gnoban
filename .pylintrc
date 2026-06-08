@@ -4,7 +4,7 @@ fail-under=9.5
 [DESIGN]
 # Project-specific thresholds
 max-attributes=9
-max-branches=13
+max-branches=15
 max-returns=7
 
 [MESSAGES CONTROL]

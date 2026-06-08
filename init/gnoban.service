@@ -7,9 +7,12 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-EnvironmentFile=/etc/gnoban/gnoban.conf
-ExecStart=gnoban $GNOBAN_ARGS
-ExecStartPre=systemd-cat -t gnoban echo "${GNOBAN_ARGS}"
+ExecStart=/usr/local/bin/gnoban -conf /etc/gnoban/gnoban.toml \
+                                -logfile /var/log/gnoban/gnoban.log
+
+# Make sure the config directory is readable by the service user
+PermissionsStartOnly=true
+ExecStartPre=/bin/chgrp gnoban /etc/gnoban
 
 # Process management
 ####################
@@ -25,10 +28,15 @@ StandardOutput=null
 
 # Run as gnoban:gnoban
 User=gnoban
+Group=gnoban
+
+# /etc/gnoban
+ConfigurationDirectory=gnoban
+ConfigurationDirectoryMode=0755
 
 # /var/log/gnoban
 LogsDirectory=gnoban
-WorkingDirectory=/var/log/gnoban
+LogsDirectoryMode=0755
 
 # /var/cache/gnoban
 CacheDirectory=gnoban

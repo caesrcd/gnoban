@@ -165,18 +165,18 @@ class Criteria:
     Each attribute has a default value. Empty/zero values mean the filter is not applied.
 
     Attributes:
-        filter_expr: A filter expression (logical string condition).
+        filterexpr: A filter expression (logical string condition).
         minfeefilter: Minimum fee rate (in BTC/kvB) to match.
         service: Set of service flags to match.
         useragent: Set of user agent strings to match.
         version: Set of protocol versions to match.
-        transport: Set of transport protocol types to match.
+        transport: Transport protocol types to match.
     """
-    filter_expr: str = ''
+    filterexpr: str = ''
     minfeefilter: float = 0
-    service: Set[int] = field(default_factory=set)
-    useragent: Set[str] = field(default_factory=set)
-    version: Set[int] = field(default_factory=set)
+    service: Set[int] | None = None
+    useragent: Set[str] | None = None
+    version: Set[int] | None = None
     transport: str = ''
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -184,8 +184,8 @@ class Criteria:
         if not value:
             return
         msg_pre = f'argument {name} (-{name[0]})'
-        if name == 'filter_expr':
-            parsed_expr = compile_node_filter(value)
+        if name == 'filterexpr':
+            parsed_expr = compile_node_filter(str(value))
             try:
                 ast.parse(parsed_expr, mode='eval')
                 node_test = Node(addr='', network='')
@@ -194,20 +194,29 @@ class Criteria:
                 value = parsed_expr
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 raise ValueError(f'{msg_pre}: invalid filter expression: {value!r}') from exc
-        if name == 'service':
-            for v in value:
-                if isinstance(v, str) and not v.isdigit():
-                    raise ValueError(f'{msg_pre}: invalid int value: {v!r}')
-                if v < 0:
-                    raise ValueError(f'{msg_pre}: value must be at least 0: {v!r}')
-                if v > 63:
-                    raise ValueError(f'{msg_pre}: value out of range (0-63): {v!r}')
-        if name == 'useragent':
-            for pattern in value:
-                try:
-                    re.compile(pattern)
-                except re.error as exc:
-                    raise ValueError(f'{msg_pre}: invalid regex: {pattern!r}') from exc
+        elif name in ['service', 'useragent', 'version']:
+            if not isinstance(value, list):
+                value = {value}
+            if name == 'useragent':
+                value = {str(v) for v in value}
+                for pattern in value:
+                    try:
+                        re.compile(pattern)
+                    except re.error as exc:
+                        raise ValueError(f'{msg_pre}: invalid regex: {pattern!r}') from exc
+            else:
+                for v in value:
+                    if isinstance(v, str) and not v.isdigit():
+                        raise ValueError(f'{msg_pre}: invalid int value: {v!r}')
+                    if name == 'service' and int(v) < 0:
+                        raise ValueError(f'{msg_pre}: value must be at least 0: {v!r}')
+                    if name == 'service' and int(v) > 63:
+                        raise ValueError(f'{msg_pre}: value out of range (0-63): {v!r}')
+                value = {int(v) for v in value}
+        elif name == 'transport':
+            value = str(value).lower()
+            if value not in ['v1', 'v2']:
+                raise ValueError(f"{msg_pre}: invalid choice: {value!r} (choose from 'v1', 'v2')")
         super().__setattr__(name, value)
 
     def is_empty(self) -> bool:
@@ -820,9 +829,9 @@ def match_node(node: Node) -> bool:
     if criteria.service and any(node.services & (1 << s) for s in criteria.service):
         return True
 
-    if criteria.filter_expr:
+    if criteria.filterexpr:
         # pylint: disable=eval-used
-        if eval(criteria.filter_expr, {}, {'node': node, 're': re}):
+        if eval(criteria.filterexpr, {}, {'node': node, 're': re}):
             return True
 
     if (
@@ -906,7 +915,7 @@ def parse_argument() -> ArgumentParser:
             '''),
         help='Show version information.')
     argrp_cri = parser.add_argument_group('Criteria')
-    argrp_cri.add_argument('-f', dest='filter_expr', metavar="'expr'", type=str,
+    argrp_cri.add_argument('-f', dest='filterexpr', metavar="'expr'", type=str,
         help='Filter nodes using logical expressions.')
     argrp_cri.add_argument('-m', dest='minfeefilter', metavar='num', type=float,
         help='Match if minfeefilter is greater than <num> (BTC/kvB).')

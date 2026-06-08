@@ -1,0 +1,70 @@
+##
+## gnoban.toml configuration file.
+##
+## Lines beginning with # are comments.
+## All possible configuration options are provided. To use, copy this file
+## to the directory containing gnoban.py, uncomment the options you would
+## like to change, and save the file as gnoban.toml.
+##
+## Note: Command-line arguments take precedence over this file.
+## The -conf option (CLI only) can point to an alternative file path.
+##
+
+
+### Options
+
+
+# Time in seconds how long the node is banned.
+# (default: 31536000)
+#bantime = 31536000
+
+# Specify the Bitcoin node data directory path.
+# If a directory is given, resolves to <btcdir>/bitcoin.conf automatically.
+#btcdir = "/home/user/.bitcoin"
+
+# Specify location of the log file.
+# If a directory is given, resolves to <logfile>/gnoban.log automatically.
+# (default: gnoban.log)
+#logfile = "gnoban.log"
+
+# Max failed attempts before unbanning inactive nodes.
+# (default: 3)
+#maxattempts = 3
+
+# Connect through SOCKS5 proxy.
+#proxy = "127.0.0.1:9050"
+
+# Specify the Bitcoin node RPC endpoint.
+#rpcurl = "http://user:pass@127.0.0.1:8332"
+
+# Enable unbanning of nodes that do not meet the criteria.
+# (default: false)
+#unban = false
+
+
+### Criteria
+
+
+# Filter nodes using logical expressions.
+# Valid primitives: mff, ver, ua, srv, tpt.
+# Operators: and (&&), or (||), not (!).
+#filterexpr = "(ua 'Knots' or srv 26) and not srv 29"
+
+# Match if minfeefilter is greater than <num> (BTC/kvB).
+#minfeefilter = 0.000009
+
+# Service flags provided by the node (each value between 0 and 63).
+# Multiple values are accepted.
+#service = [27, 28]
+
+# Match against part of the node's user agent string.
+# Accepts regular expressions. Multiple values are accepted.
+#useragent = ["Knots", "BIP110"]
+
+# Protocol version of the node.
+# Multiple values are accepted.
+#version = [70001]
+
+# Match transport protocol type of the node.
+# Accepted values: "v1", "v2".
+#transport = "v1"

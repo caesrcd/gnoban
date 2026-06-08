@@ -23,6 +23,7 @@ import struct
 import sys
 import textwrap
 import threading
+import tomllib
 from argparse import (
     ArgumentParser,
     RawDescriptionHelpFormatter,
@@ -38,6 +39,7 @@ from logging import Logger
 from pathlib import Path
 from socket import AF_INET, AF_INET6
 from time import sleep, time
+from types import SimpleNamespace
 from typing import Any, Dict, Set, Tuple
 from zlib import decompress
 
@@ -960,6 +962,37 @@ def parse_argument() -> ArgumentParser:
         choices=['v1', 'v2'], help="Match transport protocol types of the node.")
 
     return parser
+
+def parse_config() -> SimpleNamespace:
+    """Loads and validates the TOML configuration file.
+
+    Reads the file at options.conf, filters out unknown keys (warning for each),
+    and returns only the entries matching fields in Options or Criteria.
+
+    Returns:
+        SimpleNamespace with valid configuration entries, or empty SimpleNamespace
+        if the file does not exist.
+    """
+    if not options.conf:
+        options.conf = str(Path(__file__).resolve().parent / 'gnoban.toml')
+
+    conf_path = Path(options.conf)
+    if not conf_path.is_file():
+        return SimpleNamespace()
+
+    valid_keys = {f.name for f in fields(Options)} | {f.name for f in fields(Criteria)}
+
+    with conf_path.open('rb') as f:
+        data = tomllib.load(f)
+
+    filtered = {}
+    for key, value in data.items():
+        if key not in valid_keys:
+            mark(Status.WARNING, f'Unknown option {key!r} in the configuration file.\r\n')
+        else:
+            filtered[key] = value
+
+    return SimpleNamespace(**filtered)
 
 def probe_nodes() -> None:
     """Probes nodes without metadata to retrieve version information.

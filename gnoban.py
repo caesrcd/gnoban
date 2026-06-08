@@ -105,6 +105,7 @@ class Color(StrEnum):
     GRN_L = '\033[92m'  # Green Light
     RED_L = '\033[91m'  # Red Light
     WHT_L = '\033[97m'  # White Light
+    YLW_L = '\033[93m'  # Yellow Light
 
 class Status(Enum):
     """Enumeration representing possible statuses for banner messages.
@@ -112,9 +113,11 @@ class Status(Enum):
     Each status consists of a color code and a human-readable label.
     Intended for visual output formatting in terminal environments.
     """
-    EMPTY  = (Color.RST,   '      ')
-    OK     = (Color.GRN_L, '  OK  ')
-    FAILED = (Color.RED_L, 'FAILED')
+    EMPTY   = (Color.RST,   '      ')
+    OK      = (Color.GRN_L, '  OK  ')
+    FAILED  = (Color.RED_L, 'FAILED')
+    ERROR   = (Color.RED_L, 'ERROR')
+    WARNING = (Color.YLW_L, 'WARNING')
 
     @property
     def color(self) -> str:

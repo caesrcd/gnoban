@@ -6,16 +6,18 @@ Install [recent Python](https://www.python.org/downloads/) (3.11+).
 
 ## Clone and setup
 
+Clone the repository, create an isolated Python environment, install the project dependencies, and place the application in `/opt/gnoban`:
+
 ```bash
-cd /opt
 git clone https://github.com/caesrcd/gnoban
 cd gnoban
 python -m venv .env
-source .env/bin/activate
-pip install -r requirements.txt
+.env/bin/pip install -r requirements.txt
+cd ../
+sudo mv gnoban /opt/gnoban
 ```
 
-## Install wrapper script
+## Install launcher
 
 Create an executable wrapper at `/usr/local/bin/gnoban` to invoke the application with the recommended Python flags:
 
@@ -41,4 +43,4 @@ EOF
 sudo chmod +x /usr/local/bin/gnoban
 ```
 
-To test, run `gnoban --help`.
+To test, run `gnoban --version`.

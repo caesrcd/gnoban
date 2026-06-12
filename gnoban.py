@@ -542,17 +542,16 @@ def exec_getpeerinfo() -> None:
         return
 
     for peer in peerinfo:
-        conntime = peer.get('conntime')
         network = peer.get('network')
         version = peer.get('version')
-        if int(time()) - conntime <= 15 or not version or network == 'not_publicly_routable':
+        if not version or network == 'not_publicly_routable':
             continue
 
         node = Node(
             addr=peer.get('addr'),
             network=network,
             services=int(peer.get('services'), 16),
-            conntime=conntime,
+            conntime=peer.get('conntime'),
             version=version,
             subver=peer.get('subver'),
             minfeefilter=float(peer.get('minfeefilter')),
@@ -561,7 +560,7 @@ def exec_getpeerinfo() -> None:
 
         address, _ = split_addressport(node.addr)
         node_old = allnodes.get(address)
-        if address != '127.0.0.1' and (not node_old or conntime != node_old.conntime):
+        if address != '127.0.0.1' and (not node_old or node.conntime != node_old.conntime):
             allnodes[address] = node
         if address == '127.0.0.1' or node_old:
             if not match_node(node) or (address != '127.0.0.1' and address not in listbanned):
@@ -1146,7 +1145,7 @@ def start() -> None:
             # Process peers and manage bans
             exec_getpeerinfo()
             exec_setban(only_recents)
-            sleep(10)
+            sleep(3)
     except KeyboardInterrupt:
         stamp('Shutdown: done\r\n')
         os._exit(0)

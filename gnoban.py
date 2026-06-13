@@ -543,8 +543,8 @@ def exec_getpeerinfo() -> None:
 
     for peer in peerinfo:
         network = peer.get('network')
-        version = peer.get('version')
-        if not version or network == 'not_publicly_routable':
+        transport = peer.get('transport_protocol_type')
+        if transport == 'detecting' or network == 'not_publicly_routable':
             continue
 
         node = Node(
@@ -552,10 +552,10 @@ def exec_getpeerinfo() -> None:
             network=network,
             services=int(peer.get('services'), 16),
             conntime=peer.get('conntime'),
-            version=version,
+            version=peer.get('version'),
             subver=peer.get('subver'),
             minfeefilter=float(peer.get('minfeefilter')),
-            transport_protocol_type=peer.get('transport_protocol_type')
+            transport_protocol_type=transport
         )
 
         address, _ = split_addressport(node.addr)

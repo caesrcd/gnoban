@@ -542,9 +542,10 @@ def exec_getpeerinfo() -> None:
         return
 
     for peer in peerinfo:
+        conntype = peer.get('connection_type')
         network = peer.get('network')
         transport = peer.get('transport_protocol_type')
-        if transport == 'detecting' or network == 'not_publicly_routable':
+        if conntype == 'feeler' or transport == 'detecting' or network == 'not_publicly_routable':
             continue
 
         node = Node(

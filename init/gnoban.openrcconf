@@ -1,0 +1,27 @@
+# /etc/conf.d/gnoban: configuration file for /etc/init.d/gnoban
+
+# Full path to the gnoban executable.
+#GNOBAN_BIN="/usr/local/bin/gnoban"
+
+# Directory used by gnoban to store cached data.
+#GNOBAN_CACHEDIR="/var/cache/gnoban"
+
+# Directory containing gnoban configuration files.
+#GNOBAN_CONFDIR="/etc/gnoban"
+
+# Main gnoban configuration file.
+#GNOBAN_CONFFILE="${GNOBAN_CONFDIR}/gnoban.toml"
+
+# Directory where log files are stored.
+#GNOBAN_LOGDIR="/var/log/gnoban"
+
+# Log file used by gnoban.
+#GNOBAN_LOGFILE="${GNOBAN_LOGDIR}/gnoban.log"
+
+# User and group under which gnoban will run.
+#GNOBAN_USER="gnoban"
+#GNOBAN_GROUP="gnoban"
+
+# Additional command-line options passed to gnoban.
+# Do not use -conf or -logfile here; use the variables above instead.
+#GNOBAN_OPTS=""

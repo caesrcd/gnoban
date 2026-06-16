@@ -1,6 +1,8 @@
 Sample configuration files for:
 ```
 systemd: gnoban.service
+OpenRC:  gnoban.openrc
+         gnoban.openrcconf
 ```
 have been made available to assist packagers in creating packages here.
 

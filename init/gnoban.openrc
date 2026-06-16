@@ -1,0 +1,55 @@
+#!/sbin/openrc-run
+
+GNOBAN_BIN=${GNOBAN_BIN:-/usr/local/bin/gnoban}
+GNOBAN_CACHEDIR=${GNOBAN_CACHEDIR:-/var/cache/gnoban}
+GNOBAN_CONFDIR=${GNOBAN_CONFDIR:-/etc/gnoban}
+GNOBAN_CONFFILE=${GNOBAN_CONFFILE:-${GNOBAN_CONFDIR}/gnoban.toml}
+GNOBAN_LOGDIR=${GNOBAN_LOGDIR:-/var/log/gnoban}
+GNOBAN_LOGFILE=${GNOBAN_LOGFILE:-${GNOBAN_LOGDIR}/gnoban.log}
+GNOBAN_USER=${GNOBAN_USER:-gnoban}
+GNOBAN_GROUP=${GNOBAN_GROUP:-gnoban}
+
+name="GNOBAN"
+description="Global Node Search & Ban"
+
+command="${GNOBAN_BIN}"
+command_args="-conf=\"${GNOBAN_CONFFILE}\" \
+        -logfile=\"${GNOBAN_LOGFILE}\" \
+        ${GNOBAN_OPTS}"
+
+command_user="${GNOBAN_USER}:${GNOBAN_GROUP}"
+command_background="yes"
+
+pidfile="/run/${RC_SVCNAME}.pid"
+required_files="${GNOBAN_CONFFILE}"
+
+retry="SIGINT/10/SIGKILL/15"
+start_stop_daemon_args="-w 2000"
+
+depend() {
+    need net
+}
+
+start_pre() {
+    checkpath --directory \
+    --mode 0750 \
+    --owner "${GNOBAN_USER}:${GNOBAN_GROUP}" \
+    "${GNOBAN_CACHEDIR}"
+
+    checkpath --directory \
+    --mode 0755 \
+    --owner "${GNOBAN_USER}:${GNOBAN_GROUP}" \
+    "${GNOBAN_CONFDIR}"
+
+    checkpath --directory \
+    --mode 0755 \
+    --owner "${GNOBAN_USER}:${GNOBAN_GROUP}" \
+    "${GNOBAN_LOGDIR}"
+
+    checkpath --file \
+    --mode 0644 \
+    --owner "${GNOBAN_USER}:${GNOBAN_GROUP}" \
+    "${GNOBAN_LOGFILE}"
+
+    chgrp ${GNOBAN_GROUP} "${GNOBAN_CONFFILE}" || return 1
+}

@@ -179,8 +179,26 @@ jobs:
           file build/gnoban.exe
           ./build/gnoban.exe --version
 
-      - name: Upload built executable
+      - name: Install NSIS
+        uses: negrutiu/nsis-install@v2
+
+      - name: Install `EnVar` from web
+        uses: negrutiu/nsis-install-plugin@v1
+        with:
+          url: https://nsis.sourceforge.io/mediawiki/images/7/7f/EnVar_plugin.zip
+
+      - name: Build installer
+        run: |
+          makensis "-DVERSION=${VERSION:1}" "-XOutFile ../build/installer.exe" share/setup.nsi
+
+      - name: Run installer test
+        run: |
+          file build/installer.exe
+
+      - name: Upload built executable and installer
         uses: actions/upload-artifact@v7
         with:
           name: gnoban-${{ env.VERSION }}-${{ matrix.name }}
-          path: build/gnoban.exe
+          path: |
+            build/gnoban.exe
+            build/installer.exe

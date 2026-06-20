@@ -98,4 +98,4 @@ Example using a complex filter expression:
 filterexpr = "(ua 'Knots' or srv 26) and not srv 29"
 ```
 
-See [`gnoban.toml.example`](../gnoban.toml.example) for a full reference of all available options.
+See [share/examples/gnoban.toml](../share/examples/gnoban.toml) for a full reference of all available options.

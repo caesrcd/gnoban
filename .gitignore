@@ -1,4 +1,3 @@
 build/
 .env
 *.log
-gnoban.toml

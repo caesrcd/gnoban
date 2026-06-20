@@ -51,27 +51,27 @@ Download the latest release from the [GNOBAN releases page](https://github.com/c
 ### Linux
 
 ```bash
-tar xzf gnoban-*-linux-gnu.tar.gz
-sudo install gnoban-*/gnoban /usr/local/bin/
+tar xzf gnoban-1.2.0-linux-gnu.tar.gz
+sudo install gnoban-1.2.0/gnoban /usr/local/bin/
 ```
 
 ### MacOS
 
 ```bash
-unzip gnoban-*-apple-darwin.zip
-sudo install gnoban-*/gnoban /usr/local/bin/
+unzip gnoban-1.2.0-apple-darwin.zip
+sudo install gnoban-1.2.0/gnoban /usr/local/bin/
 ```
 
 ### Windows
 
-Extract the `.zip` file and move `gnoban.exe` to `C:\Program Files (x86)\Gnoban\`.
+Extract the `.zip` file and move the files to `%USERPROFILE%\AppData\Local\GNOBAN`.
 
 Then add the installation directory to your `PATH` environment variable:
 
 1. Open **Start** and search for *Edit the system environment variables*.
 2. Click **Environment Variables**.
-3. Under *System variables*, select **Path** and click **Edit**.
-4. Click **New** and add `C:\Program Files (x86)\Gnoban`.
+3. Under *User variables*, select **Path** and click **Edit**.
+4. Click **New** and add `%USERPROFILE%\AppData\Local\GNOBAN`.
 5. Click **OK** to apply.
 
-To test, run `gnoban --help`.
+To test, run `gnoban --version`.

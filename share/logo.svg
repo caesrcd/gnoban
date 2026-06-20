@@ -1,0 +1,125 @@
+<svg viewBox="-10 -10 790 790" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+
+    <!-- Bitcoin coin gradient -->
+    <radialGradient id="btcFace" cx="38%" cy="32%" r="75%">
+      <stop offset="0%" stop-color="#FFD45E"/>
+      <stop offset="45%" stop-color="#FBB72E"/>
+      <stop offset="100%" stop-color="#E8890C"/>
+    </radialGradient>
+    <linearGradient id="btcEdge" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#C97203"/>
+      <stop offset="100%" stop-color="#9C5402"/>
+    </linearGradient>
+
+    <!-- Server node gradients -->
+    <radialGradient id="serverRing" cx="35%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="55%" stop-color="#E4E6E8"/>
+      <stop offset="100%" stop-color="#AFB3B8"/>
+    </radialGradient>
+    <radialGradient id="serverFace" cx="38%" cy="28%" r="80%">
+      <stop offset="0%" stop-color="#3A3A3D"/>
+      <stop offset="55%" stop-color="#191919"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </radialGradient>
+
+    <!-- Blocked node gradients -->
+    <radialGradient id="blockRing" cx="35%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#FF6A4D"/>
+      <stop offset="55%" stop-color="#E8431F"/>
+      <stop offset="100%" stop-color="#A82B0E"/>
+    </radialGradient>
+    <radialGradient id="blockFace" cx="38%" cy="28%" r="80%">
+      <stop offset="0%" stop-color="#2B2B2B"/>
+      <stop offset="55%" stop-color="#161616"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </radialGradient>
+
+    <filter id="softShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <!-- Dashed connector cicle -->
+  <circle cx="385" cy="385" r="305" fill="none" stroke="#8A8D90" stroke-width="7" stroke-dasharray="18 16"/>
+
+  <!-- Straight dashed spokes -->
+  <line x1="385" y1="367" x2="385" y2="90" stroke="#8A8D90" stroke-width="7" stroke-dasharray="16 14"/>
+  <line x1="367" y1="385" x2="90" y2="385" stroke="#8A8D90" stroke-width="7" stroke-dasharray="16 14"/>
+  <line x1="403" y1="385" x2="680" y2="385" stroke="#8A8D90" stroke-width="7" stroke-dasharray="16 14"/>
+  <line x1="385" y1="403" x2="385" y2="680" stroke="#D8432A" stroke-width="7" stroke-dasharray="16 14"/>
+
+  <!-- Top server node -->
+  <g filter="url(#softShadow)">
+    <circle cx="385" cy="82" r="82" fill="url(#serverRing)"/>
+    <circle cx="385" cy="82" r="70" fill="url(#serverFace)"/>
+  </g>
+  <g transform="translate(385,82)">
+    <rect x="-44" y="-34" width="88" height="68" rx="8" fill="#FFFFFF"/>
+    <line x1="-44" y1="0" x2="44" y2="0" stroke="#1A1A1A" stroke-width="4"/>
+    <circle cx="-30" cy="-17" r="5" fill="#1A1A1A"/>
+    <circle cx="-30" cy="17" r="5" fill="#1A1A1A"/>
+    <rect x="-6" y="-22" width="36" height="9" rx="2" fill="#C9CCCF"/>
+    <rect x="-6" y="12" width="36" height="9" rx="2" fill="#C9CCCF"/>
+  </g>
+
+  <!-- Left server node -->
+  <g filter="url(#softShadow)">
+    <circle cx="82" cy="385" r="82" fill="url(#serverRing)"/>
+    <circle cx="82" cy="385" r="70" fill="url(#serverFace)"/>
+  </g>
+  <g transform="translate(82,385)">
+    <rect x="-44" y="-34" width="88" height="68" rx="8" fill="#FFFFFF"/>
+    <line x1="-44" y1="0" x2="44" y2="0" stroke="#1A1A1A" stroke-width="4"/>
+    <circle cx="-30" cy="-17" r="5" fill="#1A1A1A"/>
+    <circle cx="-30" cy="17" r="5" fill="#1A1A1A"/>
+    <rect x="-6" y="-22" width="36" height="9" rx="2" fill="#C9CCCF"/>
+    <rect x="-6" y="12" width="36" height="9" rx="2" fill="#C9CCCF"/>
+  </g>
+
+  <!-- Right server node -->
+  <g filter="url(#softShadow)">
+    <circle cx="688" cy="385" r="82" fill="url(#serverRing)"/>
+    <circle cx="688" cy="385" r="70" fill="url(#serverFace)"/>
+  </g>
+  <g transform="translate(688,385)">
+    <rect x="-44" y="-34" width="88" height="68" rx="8" fill="#FFFFFF"/>
+    <line x1="-44" y1="0" x2="44" y2="0" stroke="#1A1A1A" stroke-width="4"/>
+    <circle cx="-30" cy="-17" r="5" fill="#1A1A1A"/>
+    <circle cx="-30" cy="17" r="5" fill="#1A1A1A"/>
+    <rect x="-6" y="-22" width="36" height="9" rx="2" fill="#C9CCCF"/>
+    <rect x="-6" y="12" width="36" height="9" rx="2" fill="#C9CCCF"/>
+  </g>
+
+  <!-- Bottom blocked node -->
+  <g filter="url(#softShadow)">
+    <circle cx="385" cy="688" r="82" fill="url(#blockRing)"/>
+    <circle cx="385" cy="688" r="68" fill="url(#blockFace)"/>
+  </g>
+  <g transform="translate(385,688)">
+    <circle r="46" fill="none" stroke="#FF5A36" stroke-width="9"/>
+    <line x1="-31" y1="31" x2="31" y2="-31" stroke="#FF5A36" stroke-width="9" stroke-linecap="round"/>
+  </g>
+
+  <!-- Center bitcoin coin -->
+  <g filter="url(#softShadow)">
+    <ellipse cx="383" cy="393" rx="128" ry="125" fill="url(#btcEdge)"/>
+  </g>
+  <svg x="255" y="253" width="256" height="256" viewBox="0 0 64 64" overflow="visible">
+    <defs>
+      <linearGradient id="coin-gradient-official" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" style="stop-color:#f9aa4b"/>
+        <stop offset="100%" style="stop-color:#f7931a"/>
+      </linearGradient>
+    </defs>
+    <g transform="scale(1.015625)">
+      <path id="coin"
+            d="m 63.0359,39.741 c -4.274,17.143 -21.637,27.576 -38.782,23.301 -17.138,-4.274 -27.571,-21.638 -23.295,-38.78 4.272,-17.145 21.635,-27.579 38.775,-23.305 17.144,4.274 27.576,21.64 23.302,38.784 z"
+            style="fill:url(#coin-gradient-official)"/>
+      <path id="symbol"
+            d="m 46.1009,27.441 c 0.637,-4.258 -2.605,-6.547 -7.038,-8.074 l 1.438,-5.768 -3.511,-0.875 -1.4,5.616 c -0.923,-0.23 -1.871,-0.447 -2.813,-0.662 l 1.41,-5.653 -3.509,-0.875 -1.439,5.766 c -0.764,-0.174 -1.514,-0.346 -2.242,-0.527 l 0.004,-0.018 -4.842,-1.209 -0.934,3.75 c 0,0 2.605,0.597 2.55,0.634 1.422,0.355 1.679,1.296 1.636,2.042 l -1.638,6.571 c 0.098,0.025 0.225,0.061 0.365,0.117 -0.117,-0.029 -0.242,-0.061 -0.371,-0.092 l -2.296,9.205 c -0.174,0.432 -0.615,1.08 -1.609,0.834 0.035,0.051 -2.552,-0.637 -2.552,-0.637 l -1.743,4.019 4.569,1.139 c 0.85,0.213 1.683,0.436 2.503,0.646 l -1.453,5.834 3.507,0.875 1.439,-5.772 c 0.958,0.26 1.888,0.5 2.798,0.726 l -1.434,5.745 3.511,0.875 1.453,-5.823 c 5.987,1.133 10.489,0.676 12.384,-4.739 1.527,-4.36 -0.076,-6.875 -3.226,-8.515 2.294,-0.529 4.022,-2.038 4.483,-5.155 z m -8.022,11.249 c -1.085,4.36 -8.426,2.003 -10.806,1.412 l 1.928,-7.729 c 2.38,0.594 10.012,1.77 8.878,6.317 z m 1.086,-11.312 c -0.99,3.966 -7.1,1.951 -9.082,1.457 l 1.748,-7.01 c 1.982,0.494 8.365,1.416 7.334,5.553 z"
+            style="fill:#ffffff"/>
+    </g>
+  </svg>
+</svg>

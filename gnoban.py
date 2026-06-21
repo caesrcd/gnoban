@@ -62,7 +62,7 @@ class Version:
     Build hash is calculated from source file SHA256 in development mode.
     """
     MAJOR = 1
-    MINOR = 2
+    MINOR = 3
     PATCH = 0
 
     @classmethod

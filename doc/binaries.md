@@ -23,7 +23,7 @@ Download the latest release from the [GNOBAN releases page](https://github.com/c
   - ***MacOS***
     ```bash
     shasum -a 256 --ignore-missing --check SHA256SUMS
-    gnoban-1.3.0-x86_64-apple-darwin.zip: OK
+    gnoban-1.3.0-arm64-apple-darwin.zip: OK
     ```
 
   - ***Windows***
@@ -51,14 +51,14 @@ Download the latest release from the [GNOBAN releases page](https://github.com/c
 ### Linux
 
 ```bash
-tar xzf gnoban-1.3.0-linux-gnu.tar.gz
+tar xzf gnoban-1.3.0-x86_64-linux-gnu.tar.gz
 sudo install gnoban-1.3.0/gnoban /usr/local/bin/
 ```
 
 ### MacOS
 
 ```bash
-unzip gnoban-1.3.0-apple-darwin.zip
+unzip gnoban-1.3.0-arm64-apple-darwin.zip
 sudo install gnoban-1.3.0/gnoban /usr/local/bin/
 ```
 

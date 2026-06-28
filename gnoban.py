@@ -560,29 +560,26 @@ def exec_getpeerinfo() -> None:
         )
 
         address, _ = split_addressport(node.addr)
-        node_old = allnodes.get(address)
-        if address != '127.0.0.1' and (not node_old or node.conntime != node_old.conntime):
+        if address != '127.0.0.1':
             allnodes[address] = node
-        if address == '127.0.0.1' or node_old:
-            if not match_node(node) or (address != '127.0.0.1' and address not in listbanned):
-                continue
-            try:
-                rpc_proxy.call('disconnectnode', node.addr)
-                stamp(f'Node disconnected: net={node.network}, services={node.services}, '
-                    f'transport={node.transport_protocol_type}, '
-                    f'version={str(node.version)}{node.subver}')
-            except JSONRPCError as e:
-                if e.args[0].get('code') != -29:
-                    mark(Status.FAILED,
-                        f'Could not disconnect address {node.addr} '
-                        f'({str(node.version)}{node.subver}) '
-                        f"[{e.args[0].get('message')}]", False)
-            except Exception as e:  # pylint: disable=broad-exception-caught
+        if not match_node(node) or (address != '127.0.0.1' and address not in listbanned):
+            continue
+        try:
+            rpc_proxy.call('disconnectnode', node.addr)
+            stamp(f'Node disconnected: net={node.network}, services={node.services}, '
+                f'transport={node.transport_protocol_type}, '
+                f'version={str(node.version)}{node.subver}')
+        except JSONRPCError as e:
+            if e.args[0].get('code') != -29:
                 mark(Status.FAILED,
                     f'Could not disconnect address {node.addr} '
                     f'({str(node.version)}{node.subver}) '
-                    f'[{e}]', False)
-            continue
+                    f"[{e.args[0].get('message')}]", False)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            mark(Status.FAILED,
+                f'Could not disconnect address {node.addr} '
+                f'({str(node.version)}{node.subver}) '
+                f'[{e}]', False)
 
 def exec_setban(only_recents: bool) -> None:
     """Bans or unbans nodes based on filtering criteria and connection status.

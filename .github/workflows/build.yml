@@ -28,10 +28,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.13
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.13"
 
       - name: Install dependencies
         run: |
@@ -72,8 +72,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - name: arm64-linux-gnu
+            os: ubuntu-24.04-arm
+            manylinux: quay.io/pypa/manylinux2014_aarch64
           - name: x86_64-linux-gnu
             os: ubuntu-latest
+            manylinux: quay.io/pypa/manylinux2014_x86_64
     timeout-minutes: 120
     steps:
       - name: Checkout
@@ -84,7 +88,7 @@ jobs:
           docker run --rm \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
-            quay.io/pypa/manylinux2014_x86_64 \
+            ${{ matrix.manylinux }} \
             bash -c "
               # Configuring Python 3.11
               ln -sf /opt/python/cp311-cp311/bin/python3 /usr/local/bin/python3
@@ -139,10 +143,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.14
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.14"
 
       - name: Install dependencies
         run: |

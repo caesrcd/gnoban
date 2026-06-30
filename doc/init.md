@@ -37,8 +37,10 @@ NOTE: When using the systemd .service file, the creation of the aforementioned d
 
 Installing this .service file consists of just copying it to /etc/systemd/system directory, followed by the command `systemctl daemon-reload` in order to update running systemd configuration.
 
-To test, run `systemctl start gnoban` and to enable for system startup run `systemctl enable gnoban`
+To test, run `systemctl start gnoban` and to enable for system startup run `systemctl enable gnoban`.
 
 ### OpenRC
 
-Rename gnoban.openrc to gnoban and drop it in /etc/init.d. Double check ownership and permissions and make it executable. Test it with `/etc/init.d/gnoban start` and configure it to run on startup with `rc-update add gnoban`
+Copy gnoban.openrc to /etc/init.d/gnoban and make it executable. Test by running it with `/etc/init.d/gnoban start` and configure it to run on startup with `rc-update add gnoban`.
+
+Using this script, you can adjust the path and flags to the GNOBAN program by setting the environment variables in /etc/conf.d/gnoban, which can be created from gnoban.openrcconf.

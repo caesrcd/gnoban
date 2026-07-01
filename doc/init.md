@@ -1,10 +1,11 @@
 # Sample init scripts and service configuration
 
-Sample scripts and configuration files for systemd and OpenRC can be found in the [init](../init) folder.
+Sample scripts and configuration files for systemd, OpenRC and SysV init can be found in the [init](../init) folder.
 
     init/gnoban.service:    systemd service unit configuration
     init/gnoban.openrc:     OpenRC service script
     init/gnoban.openrcconf: OpenRC conf.d file
+    init/gnoban.init:       Debian-style SysV init script
 
 ## Service User
 
@@ -44,3 +45,10 @@ To test, run `systemctl start gnoban` and to enable for system startup run `syst
 Copy gnoban.openrc to /etc/init.d/gnoban and make it executable. Test by running it with `/etc/init.d/gnoban start` and configure it to run on startup with `rc-update add gnoban`.
 
 Using this script, you can adjust the path and flags to the GNOBAN program by setting the environment variables in /etc/conf.d/gnoban, which can be created from gnoban.openrcconf.
+
+
+### SysV init
+
+Copy gnoban.init to /etc/init.d/gnoban and make it executable. Test by running `service gnoban start` and configure it to run on startup with `update-rc.d gnoban defaults`.
+
+Using this script, you can adjust the path and flags to the GNOBAN program by setting the environment variables in /etc/default/gnoban.

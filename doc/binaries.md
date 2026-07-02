@@ -17,18 +17,18 @@ Download the latest release from the [GNOBAN releases page](https://github.com/c
   - ***Linux***
     ```bash
     sha256sum --ignore-missing --check SHA256SUMS
-    gnoban-1.3.0-x86_64-linux-gnu.tar.gz: OK
+    gnoban-1.3.1-x86_64-linux-gnu.tar.gz: OK
     ```
 
   - ***MacOS***
     ```bash
     shasum -a 256 --ignore-missing --check SHA256SUMS
-    gnoban-1.3.0-arm64-apple-darwin.zip: OK
+    gnoban-1.3.1-arm64-apple-darwin.zip: OK
     ```
 
   - ***Windows***
     ```bash
-    certUtil -hashfile gnoban-1.3.0-win64.zip SHA256
+    certUtil -hashfile gnoban-1.3.1-win64.zip SHA256
     ```
 
     Ensure that the checksum produced by the command above matches one of the entries in the SHA256SUMS file. You can display the file contents with:
@@ -51,15 +51,15 @@ Download the latest release from the [GNOBAN releases page](https://github.com/c
 ### Linux
 
 ```bash
-tar xzf gnoban-1.3.0-x86_64-linux-gnu.tar.gz
-sudo install gnoban-1.3.0/gnoban /usr/local/bin/
+tar xzf gnoban-1.3.1-x86_64-linux-gnu.tar.gz
+sudo install gnoban-1.3.1/gnoban /usr/local/bin/
 ```
 
 ### MacOS
 
 ```bash
-unzip gnoban-1.3.0-arm64-apple-darwin.zip
-sudo install gnoban-1.3.0/gnoban /usr/local/bin/
+unzip gnoban-1.3.1-arm64-apple-darwin.zip
+sudo install gnoban-1.3.1/gnoban /usr/local/bin/
 ```
 
 ### Windows

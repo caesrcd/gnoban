@@ -63,7 +63,7 @@ class Version:
     """
     MAJOR = 1
     MINOR = 3
-    PATCH = 0
+    PATCH = 1
 
     @classmethod
     def get_build_hash(cls) -> str | None:
